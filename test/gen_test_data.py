@@ -17,7 +17,7 @@ def gen_string(prefix="test", id=0):
 
 
 def gen_time():
-    return int(time.time()) - random.randint(10000)
+    return int(time.time()) - random.randint(0, 10000)
 
 
 def gen_int():
@@ -43,7 +43,10 @@ def gen_record(columns, id):
             else:
                 record.append(gen_string(column.name(), id))
         elif column.is_int():
-            record.append(gen_int())
+            if 'time' in column.name():
+                record.append(gen_time())
+            else:
+                record.append(gen_int())
         elif column.is_bool():
             record.append(gen_bool())
         elif column.is_json():
@@ -54,6 +57,7 @@ def gen_record(columns, id):
 def write_columns_data(table, columns, count, filename):
     with open(filename, 'w') as f:
         writer = csv.writer(f)
+        writer.writerow(table.headers())
         for i in range(count):
             record = gen_record(columns, i)
             writer.writerow(record)

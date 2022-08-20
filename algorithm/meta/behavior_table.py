@@ -13,6 +13,7 @@ class BehaviorTable(Table):
             Column('user_id', ColumnType.STRING),
             Column('item_id', ColumnType.STRING),
             Column('trace_id', ColumnType.STRING),
+            Column('type', ColumnType.STRING),
             Column('value', ColumnType.STRING),
             Column('time', ColumnType.INT),
             Column('is_login', ColumnType.BOOL),

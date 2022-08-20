@@ -11,6 +11,9 @@ class Table(Schema):
     def columns(self):
         return self._columns
 
+    def headers(self):
+        return [col.name() for col in self._columns]
+
     def pk(self):
         return self._pk
 
