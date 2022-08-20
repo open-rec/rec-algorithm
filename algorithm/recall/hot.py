@@ -19,10 +19,3 @@ class Hot(Recall):
             results.append(ScoreItem(item=item, score=value * 1.0 / top_v.max()))
         return results
 
-
-if __name__ == "__main__":
-    behaviors = pd.read_csv('../../data/behavior.csv', header=0)
-    hot = Hot(behaviors=behaviors, hot_size=100)
-    recall_items = hot.recall()
-    for item in recall_items:
-        print(item)
