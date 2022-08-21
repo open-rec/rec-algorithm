@@ -175,5 +175,7 @@ licenses/LICENSES-ui.txt
 /breeze.exe
 
 # Generated out dir
-
 /out
+
+# Data dir
+/data
