@@ -26,7 +26,8 @@ class ItemBasedI2I(I2I):
             lambda x: make_item_time_pair(x)).reset_index().rename(columns={0: 'item_sequence'})
         return dict(zip(user_item_sequence['user_id'], user_item_sequence['item_sequence']))
 
-    def recall(self, triggers=[]):
+    def recall(self, user_triggers=[], item_triggers=[]):
+        triggers = item_triggers
         assert triggers
 
         user_item_time_dict = self.gen_seq()
@@ -53,7 +54,7 @@ class ItemBasedI2I(I2I):
         inner_size = math.ceil(self._recall_size / len(triggers))
         remain = self._recall_size
         for trigger in triggers:
-            if full_i2i_items[trigger]:
+            if trigger in full_i2i_items and full_i2i_items[trigger]:
                 sort_items = sorted(full_i2i_items[triggers[0]].items(), key=lambda item: item[1], reverse=True)[
                              :min(inner_size, remain)]
                 for item, score in sort_items:

@@ -10,5 +10,5 @@ class Recall(abc.ABC):
         self._recall_size = recall_size
 
     @abc.abstractmethod
-    def recall(self, triggers=[]):
+    def recall(self, user_triggers=[], item_triggers=[]):
         pass

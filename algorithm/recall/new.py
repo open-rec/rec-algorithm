@@ -8,7 +8,7 @@ class New(Recall):
         super().__init__(items=items, recall_size=recall_size)
         self.power = 31
 
-    def recall(self, triggers=[]):
+    def recall(self, user_triggers=[], item_triggers=[]):
         self._items.drop_duplicates((['id']))
         top_v = self._items.sort_values(by=['pub_time'], ascending=False).values[:self._recall_size]
         id_index = self._items.columns.get_loc('id')
