@@ -148,7 +148,7 @@ def write_columns_data(table, count, filename):
                 writer.writerow(record)
 
 
-def gen_user_data(count=100000, filename='user.csv'):
+def gen_user_data(count=200000, filename='user.csv'):
     table = UserTable()
     write_columns_data(table, count, filename)
 
