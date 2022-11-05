@@ -179,3 +179,7 @@ licenses/LICENSES-ui.txt
 
 # Data dir
 /data
+
+# egg
+rec_algorithm.egg-info
+dist
