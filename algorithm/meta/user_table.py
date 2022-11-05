@@ -10,7 +10,7 @@ class UserTable(Table):
         self._pk = Column('id')
         self._columns = [
             Column('id', ColumnType.STRING),
-            Column('device_number', ColumnType.STRING),
+            Column('device_id', ColumnType.STRING),
             Column('name', ColumnType.STRING),
             Column('gender', ColumnType.BOOL),
             Column('age', ColumnType.INT),

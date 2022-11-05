@@ -4,8 +4,8 @@ from algorithm.structure.score_item import ScoreItem
 
 class Hot(Recall):
 
-    def __init__(self, behaviors=None, recall_size=1000):
-        super().__init__(behaviors=behaviors, recall_size=recall_size)
+    def __init__(self, events=None, recall_size=1000):
+        super().__init__(events=events, recall_size=recall_size)
 
     def recall(self, user_triggers=[], item_triggers=[]):
         self._behaviors.drop_duplicates((['id', 'user_id', 'item_id', 'time', 'type', 'value']))

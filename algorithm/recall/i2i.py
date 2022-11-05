@@ -7,14 +7,14 @@ from algorithm.structure.score_item import ScoreItem
 
 class I2I(Recall):
 
-    def __init__(self, behaviors=None, recall_size=100):
-        super().__init__(behaviors=behaviors, recall_size=recall_size)
+    def __init__(self, events=None, recall_size=100):
+        super().__init__(events=events, recall_size=recall_size)
 
 
 class ItemBasedI2I(I2I):
 
-    def __init__(self, behaviors=None, recall_size=100):
-        super().__init__(behaviors=behaviors, recall_size=recall_size)
+    def __init__(self, events=None, recall_size=100):
+        super().__init__(events=events, recall_size=recall_size)
 
     def gen_seq(self):
         def make_item_time_pair(df):

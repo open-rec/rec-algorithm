@@ -8,8 +8,8 @@ from algorithm.structure.score_item import ScoreItem
 
 class Embedding(Recall):
 
-    def __init__(self, users=None, items=None, behaviors=None, recall_size=1000):
-        super().__init__(users=users, items=items, behaviors=behaviors, recall_size=recall_size)
+    def __init__(self, users=None, items=None, events=None, recall_size=1000):
+        super().__init__(users=users, items=items, events=events, recall_size=recall_size)
         self._model = None
 
     @abc.abstractmethod
@@ -52,8 +52,8 @@ class ItemEntityEmbedding(Embedding):
 
 class EventEmbedding(Embedding):
 
-    def __init__(self, behaviors=None, recall_size=1000):
-        super().__init__(behaviors=behaviors, recall_size=recall_size)
+    def __init__(self, events=None, recall_size=1000):
+        super().__init__(events=events, recall_size=recall_size)
         self._model = None
 
     def train(self, sentences=None):
