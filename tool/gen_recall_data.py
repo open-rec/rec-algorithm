@@ -60,6 +60,6 @@ if __name__ == "__main__":
     events = pd.read_csv('../data/event.csv', header=0)
 
     gen_i2i_data(items, events, 50, '../data/recall/i2i.csv')
-    gen_embedding_data(items, events, 10, '../data/embedding.csv')
+    gen_embedding_data(items, events, 10, '../data/recall/embedding.csv')
     gen_hot_data(events, 2000, '../data/recall/hot.csv')
     gen_new_data(items, 2000, '../data/recall/new.csv')
