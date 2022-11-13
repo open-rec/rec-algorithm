@@ -65,7 +65,7 @@ class EventEmbedding(Embedding):
 
     def train(self, sentences=None, vector_size=10):
         if sentences:
-            self._model = Word2Vec(sentences=sentences, vector_size=vector_size, min_count=1)
+            self._model = Word2Vec(sentences=sentences, vector_size=vector_size, min_count=5, window=5, epochs=3)
 
     def gen_sentences(self):
         self._behaviors.drop_duplicates((['id', 'user_id', 'item_id', 'time', 'type', 'value']))

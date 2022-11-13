@@ -18,5 +18,6 @@ class New(Recall):
         results = []
         for record in top_v:
             results.append(
-                ScoreItem(item=record[id_index], score=pow((record[time_index] * 1.0 / _max_time), self.power)))
+                ScoreItem(item=record[id_index], score=0 if _max_time == 0
+                else pow((record[time_index] * 1.0 / _max_time), self.power)))
         return results
