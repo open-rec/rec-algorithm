@@ -37,7 +37,7 @@ def gen_json():
 
 
 def gen_scene():
-    return gen_string("test", random.randint(0, 3))
+    return gen_string("scene", random.randint(0, 3))
 
 
 user_ids = []

@@ -75,7 +75,7 @@ def parse_one_item_record(table, row):
         elif column.name() == 'tags':
             record.append(row['TAGS'])
         elif column.name() == 'scene':
-            record.append('*')
+            record.append('douban_movie')
         elif column.name() == 'pub_time':
             record.append(gen_time())
         elif column.name() == 'modify_time':
@@ -103,7 +103,7 @@ def parse_one_event_record(table, row):
         elif column.name() == 'trace_id':
             record.append('open-rec')
         elif column.name() == 'scene':
-            record.append('*')
+            record.append('douban_movie')
         elif column.name() == 'type':
             record.append('click' if int(row['RATING']) > 3 else 'expose')
         elif column.name() == 'value':
