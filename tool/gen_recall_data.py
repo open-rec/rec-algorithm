@@ -55,11 +55,11 @@ def gen_new_data(items, new_size, filename):
 
 
 if __name__ == "__main__":
-    users = pd.read_csv('../data/user.csv', header=0)
-    items = pd.read_csv('../data/item.csv', header=0)
-    events = pd.read_csv('../data/event.csv', header=0)
+    users = pd.read_csv('../data/test/user.csv', header=0)
+    items = pd.read_csv('../data/test/item.csv', header=0)
+    events = pd.read_csv('../data/test/event.csv', header=0)
 
-    gen_i2i_data(items, events, 50, '../data/recall/i2i.csv')
-    gen_embedding_data(items, events, 10, '../data/recall/embedding.csv')
-    gen_hot_data(events, 2000, '../data/recall/hot.csv')
-    gen_new_data(items, 2000, '../data/recall/new.csv')
+    gen_i2i_data(items, events, 50, '../data/test/recall/i2i.csv')
+    gen_embedding_data(items, events, 10, '../data/test/recall/embedding.csv')
+    gen_hot_data(events, 2000, '../data/test/recall/hot.csv')
+    gen_new_data(items, 2000, '../data/test/recall/new.csv')

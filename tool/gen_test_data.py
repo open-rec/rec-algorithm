@@ -37,7 +37,7 @@ def gen_json():
 
 
 def gen_scene():
-    return gen_string("scene", random.randint(0, 3))
+    return gen_string("test", random.randint(0, 3))
 
 
 user_ids = []
@@ -164,6 +164,6 @@ def gen_behavior_data(count=1000000, filename='event.csv'):
 
 
 if __name__ == "__main__":
-    gen_user_data(count=10000, filename='../data/user.csv')
-    gen_item_data(count=10000, filename='../data/item.csv')
-    gen_behavior_data(count=100000, filename='../data/event.csv')
+    gen_user_data(count=10000, filename='../data/test/user.csv')
+    gen_item_data(count=10000, filename='../data/test/item.csv')
+    gen_behavior_data(count=100000, filename='../data/test/event.csv')

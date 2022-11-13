@@ -41,7 +41,7 @@ def parse_one_user_record(table, row):
         elif column.name() == 'device_id':
             record.append(gen_uuid())
         elif column.name() == 'name':
-            record.append(row['NICKNAME'])
+            record.append(row['USER_NICKNAME'])
         elif column.name() == 'gender':
             record.append(gen_bool())
         elif column.name() == 'age':
@@ -51,9 +51,9 @@ def parse_one_user_record(table, row):
         elif column.name() == 'city':
             record.append(gen_string(column.name(), gen_int(0, 0)))
         elif column.name() == 'phone':
-            record.append(gen_string(column.name(), id))
+            record.append(gen_string(column.name(), gen_int(137999999999, 158999999999)))
         elif column.name() == 'tags':
-            record.append(gen_string(column.name(), gen_int(0, 100)))
+            record.append(gen_string(column.name(), gen_int(0, 0)))
         elif column.name() == 'register_time':
             record.append(gen_time())
         elif column.name() == 'login_time':
@@ -122,7 +122,7 @@ def write_columns_data(table, from_filename, to_filename):
         writer = csv.writer(f)
         writer.writerow(table.headers())
         with open(from_filename, 'r') as rf:
-            reader = csv.reader(rf)
+            reader = csv.DictReader(rf)
             next(reader)
             for row in reader:
                 record = None
