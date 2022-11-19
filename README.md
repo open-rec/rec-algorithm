@@ -1,8 +1,9 @@
 # rec-algorithm
-for local dev environment.
+based on pandas, for local dev environment now.  
+add distributed version later...
 
 ## recall
-now support i2i, hot, new and embedding.
+support i2i, hot, new and embedding.
 
 ## rank
 todo
