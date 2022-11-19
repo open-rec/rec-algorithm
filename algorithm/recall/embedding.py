@@ -68,9 +68,9 @@ class EventEmbedding(Embedding):
             self._model = Word2Vec(sentences=sentences, vector_size=vector_size, min_count=5, window=5, epochs=3)
 
     def gen_sentences(self):
-        self._behaviors.drop_duplicates((['id', 'user_id', 'item_id', 'time', 'type', 'value']))
-        self._behaviors.sort_values('time')
-        user_item_sequence = self._behaviors.groupby('user_id')[['item_id', 'time']].apply(lambda x: list(x['item_id'])) \
+        self._events.drop_duplicates((['id', 'user_id', 'item_id', 'time', 'type', 'value']))
+        self._events.sort_values('time')
+        user_item_sequence = self._events.groupby('user_id')[['item_id', 'time']].apply(lambda x: list(x['item_id'])) \
             .reset_index().rename(columns={0: 'item_sequence'})
         return user_item_sequence['item_sequence'].values.tolist()
 

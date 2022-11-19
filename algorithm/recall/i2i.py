@@ -26,9 +26,9 @@ class ItemBasedI2I(I2I):
         def make_item_time_pair(df):
             return list(zip(df['item_id'], df['time']))
 
-        self._behaviors.drop_duplicates((['id', 'user_id', 'item_id', 'time', 'type', 'value']))
-        self._behaviors.sort_values('time')
-        user_item_sequence = self._behaviors.groupby('user_id')[['item_id', 'time']]\
+        self._events.drop_duplicates((['id', 'user_id', 'item_id', 'time', 'type', 'value']))
+        self._events.sort_values('time')
+        user_item_sequence = self._events.groupby('user_id')[['item_id', 'time']]\
             .apply(lambda x: make_item_time_pair(x)).reset_index().rename(columns={0: 'item_sequence'})
         return dict(zip(user_item_sequence['user_id'], user_item_sequence['item_sequence']))
 

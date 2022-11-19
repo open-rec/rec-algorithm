@@ -3,7 +3,7 @@ import random
 import time
 import uuid
 
-from algorithm.meta.event_table import BehaviorTable
+from algorithm.meta.event_table import EventTable
 from algorithm.meta.item_table import ItemTable
 from algorithm.meta.user_table import UserTable
 
@@ -158,12 +158,12 @@ def gen_item_data(count=10000, filename='item.csv'):
     write_columns_data(table, count, filename)
 
 
-def gen_behavior_data(count=1000000, filename='event.csv'):
-    table = BehaviorTable()
+def gen_event_data(count=1000000, filename='event.csv'):
+    table = EventTable()
     write_columns_data(table, count, filename)
 
 
 if __name__ == "__main__":
     gen_user_data(count=10000, filename='../data/test/user.csv')
     gen_item_data(count=10000, filename='../data/test/item.csv')
-    gen_behavior_data(count=100000, filename='../data/test/event.csv')
+    gen_event_data(count=100000, filename='../data/test/event.csv')

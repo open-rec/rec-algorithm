@@ -3,7 +3,7 @@ from algorithm.meta.column_type import ColumnType
 from algorithm.meta.table import Table
 
 
-class BehaviorTable(Table):
+class EventTable(Table):
 
     def __init__(self):
         self._name = 'event'

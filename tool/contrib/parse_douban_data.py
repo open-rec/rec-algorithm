@@ -4,7 +4,7 @@ import time
 import uuid
 import datetime
 
-from algorithm.meta.event_table import BehaviorTable
+from algorithm.meta.event_table import EventTable
 from algorithm.meta.item_table import ItemTable
 from algorithm.meta.user_table import UserTable
 
@@ -147,11 +147,11 @@ def parse_item_data(from_filename='item.csv', to_filename='item.csv'):
 
 
 def parse_event_data(from_filename='event.csv', to_filename='event.csv'):
-    table = BehaviorTable()
+    table = EventTable()
     write_columns_data(table, from_filename, to_filename)
 
 
 if __name__ == "__main__":
-    parse_user_data(from_filename='../data/douban/users.csv', to_filename='../../example/data/douban/user.csv')
-    parse_item_data(from_filename='../data/douban/movies.csv', to_filename='../../example/data/douban/item.csv')
-    parse_event_data(from_filename='../data/douban/ratings.csv', to_filename='../../example/data/douban/event.csv')
+    parse_user_data(from_filename='../../data/douban/users.csv', to_filename='../../example/data/douban/user.csv')
+    parse_item_data(from_filename='../../data/douban/movies.csv', to_filename='../../example/data/douban/item.csv')
+    parse_event_data(from_filename='../../data/douban/ratings.csv', to_filename='../../example/data/douban/event.csv')
