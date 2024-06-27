@@ -8,6 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 from algorithm.feature.item_feature import ItemFeature
 from algorithm.feature.user_feature import UserFeature
 from algorithm.rank.model import RecModel
+from algorithm.utils.file_util import model_path
 
 
 class EventDataSet(Dataset):
@@ -31,39 +32,28 @@ class EventDataSet(Dataset):
             .merge(self.user_feature.users, left_on="user_id", right_on="id") \
             .merge(self.item_feature.items, left_on="item_id", right_on="id")
         self.labels = merge_events[merge_events["type"].isin(["click"])]["value"].values
-        user_features = torch.tensor(
-            np.hstack([
-                # self.user_feature.id,
-                # self.user_feature.device_id,
-                # self.user_feature.name,
-                # self.user_feature.country,
-                # self.user_feature.city,
-                # self.user_feature.phone,
-                # self.user_feature.id_features,
-                self.user_feature.gender,
-                self.user_feature.age,
-                # self.user_feature.tags,
-                # self.user_feature.register_time,
-                # self.user_feature.login_time,
-            ]),
-            dtype=torch.float32
-        )
+        user_features = np.hstack([
+            # too big too build tensor
+            # self.user_feature.id,
+            # self.user_feature.device_id,
+            # self.user_feature.name,
+            self.user_feature.country,
+            self.user_feature.city,
+            self.user_feature.gender,
+            self.user_feature.age,
+            self.user_feature.tags,
+        ])
 
-        item_features = torch.tensor(
-            np.hstack([
-                # self.item_feature.id,
-                # self.item_feature.title,
-                # self.item_feature.category,
-                # self.item_feature.tags,
-                # self.item_feature.scene,
-                # self.item_feature.pub_time,
-                # self.item_feature.modify_time,
-                # self.item_feature.expire_time,
-                self.item_feature.status,
-                self.item_feature.weight,
-            ]),
-            dtype=torch.float32
-        )
+        item_features = np.hstack([
+            # too big too build tensor
+            # self.item_feature.id,
+            # self.item_feature.title,
+            self.item_feature.category,
+            self.item_feature.tags,
+            self.item_feature.scene,
+            self.item_feature.status,
+            self.item_feature.weight,
+        ])
 
         self.user_feature_map = {
             user_id: user_features[i]
@@ -74,15 +64,15 @@ class EventDataSet(Dataset):
             item_id: item_features[i]
             for i, item_id in enumerate(self.item_feature.raw_id)
         }
-        self.dim = item_features.dim() + user_features.dim()
+        self.dim = user_features.shape[-1] + item_features.shape[-1]
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, idx):
         event = self.events.iloc[idx]
-        user_feature = self.user_feature_map[event["user_id"]]
-        item_feature = self.item_feature_map[event["item_id"]]
+        user_feature = torch.tensor(self.user_feature_map[event["user_id"]], dtype=torch.float32)
+        item_feature = torch.tensor(self.item_feature_map[event["item_id"]], dtype=torch.float32)
         label = torch.tensor(event["value"], dtype=torch.float32)
         return user_feature, item_feature, label
 
@@ -108,17 +98,26 @@ class LRRecModel(RecModel):
     def __init__(self, user_feature=None, item_feature=None, events=None):
         super().__init__()
         self.dataset = EventDataSet(user_feature=user_feature, item_feature=item_feature, events=events)
+        self.model_file = str(model_path() / "lr.pth")
         self.model = LRModel(dim=self.dataset.feature_dim)
         self.sigmoid = nn.Sigmoid()
         self.learning_rate = 0.01
 
-    def score(self, user_id="", item_ids=""):
+    def score(self, user_id="", item_ids=[]):
         with torch.no_grad():
             user_features = self.dataset.user_feature_by_id(user_id)
-            item_features = self.dataset.item_feature_by_id(item_ids)
-            score = self.model(torch.tensor(user_features, dtype=torch.float32).unsqueeze(),
-                               torch.tensor(item_features, dtype=torch.float32).unsqueeze())
-        return score.item()
+            batch_features = []
+            for item_id in item_ids:
+                item_features = self.dataset.item_feature_by_id(item_id)
+                batch_features.append(torch.cat(
+                    (
+                        torch.tensor(user_features, dtype=torch.float32),
+                        torch.tensor(item_features, dtype=torch.float32)
+                    ),
+                    dim=0
+                ))
+            score = self.model(torch.stack(batch_features))
+        return score.squeeze().tolist()
 
     def train(self, epoch_num=10, batch_size=5, shuffle=False):
         losser = nn.BCELoss()
@@ -134,3 +133,9 @@ class LRRecModel(RecModel):
                 loss.backward()
                 optimizer.step()
             print(f"epoch {epoch + 1}/{epoch_num}, loss:{loss.item():.4f}")
+
+    def save(self):
+        torch.save(self.model.state_dict(), self.model_file)
+
+    def load(self):
+        self.model.load_state_dict(torch.load(self.model_file))

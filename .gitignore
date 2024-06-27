@@ -183,3 +183,6 @@ licenses/LICENSES-ui.txt
 # egg
 rec_algorithm.egg-info
 dist
+
+# Model dir
+/model
