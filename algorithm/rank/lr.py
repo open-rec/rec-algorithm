@@ -31,9 +31,10 @@ class EventDataSet(Dataset):
         merge_events = self.events \
             .merge(self.user_feature.users, left_on="user_id", right_on="id") \
             .merge(self.item_feature.items, left_on="item_id", right_on="id")
-        self.labels = merge_events[merge_events["type"].isin(["click"])]["value"].values
+        self.events = merge_events[merge_events["type"].isin(["click", "expose"])]
+        self.labels = self.events["type"].apply(lambda x: 1 if x == "click" else 0)
         user_features = np.hstack([
-            # too big too build tensor
+            # too big to build tensor
             # self.user_feature.id,
             # self.user_feature.device_id,
             # self.user_feature.name,
@@ -45,13 +46,12 @@ class EventDataSet(Dataset):
         ])
 
         item_features = np.hstack([
-            # too big too build tensor
+            # too big to build tensor
             # self.item_feature.id,
-            # self.item_feature.title,
+            self.item_feature.title,
             self.item_feature.category,
             self.item_feature.tags,
             self.item_feature.scene,
-            self.item_feature.status,
             self.item_feature.weight,
         ])
 
@@ -67,13 +67,13 @@ class EventDataSet(Dataset):
         self.dim = user_features.shape[-1] + item_features.shape[-1]
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.events)
 
     def __getitem__(self, idx):
         event = self.events.iloc[idx]
         user_feature = torch.tensor(self.user_feature_map[event["user_id"]], dtype=torch.float32)
         item_feature = torch.tensor(self.item_feature_map[event["item_id"]], dtype=torch.float32)
-        label = torch.tensor(event["value"], dtype=torch.float32)
+        label = torch.tensor(self.labels.iloc[idx], dtype=torch.float32)
         return user_feature, item_feature, label
 
     def user_feature_by_id(self, user_id):

@@ -84,7 +84,7 @@ def gen_one_item_record(table, id):
             record.append(gen_string(table.name(), id))
             item_ids.append(record[0])
         elif column.name() == 'title':
-            record.append(gen_string(column.name(), id))
+            record.append(gen_string(column.name(), gen_int(0, 100)))
         elif column.name() == 'category':
             record.append(gen_string(column.name(), gen_int(0, 100)))
         elif column.name() == 'tags':
@@ -120,7 +120,10 @@ def gen_one_event_record(table, id):
         elif column.name() == 'scene':
             record.append(gen_string(column.name(), gen_int(0, 2)))
         elif column.name() == 'type':
-            record.append('click')
+            if random.randint(1, 10) == 1:
+                record.append('click')
+            else:
+                record.append('expose')
         elif column.name() == 'value':
             record.append(1)
         elif column.name() == 'time':
