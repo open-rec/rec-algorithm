@@ -1,12 +1,13 @@
 # rec-algorithm
-based on pandas, for local dev environment now.  
-add distributed version later...
+This is for local dev environment.  
+The distributed version will be add in the future,   
+i am too busy working...
 
 ## recall
 support i2i, hot, new and embedding.
 
 ## rank
-todo
+LR
 
 # data structure
 
