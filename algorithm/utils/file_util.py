@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 current_path = Path(__file__).resolve()
 
 
@@ -10,4 +9,3 @@ def root_path():
 
 def model_path():
     return root_path() / "model/"
-

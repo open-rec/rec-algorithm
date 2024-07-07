@@ -28,7 +28,7 @@ class ItemBasedI2I(I2I):
 
         self._events.drop_duplicates((['id', 'user_id', 'item_id', 'time', 'type', 'value']))
         self._events.sort_values('time')
-        user_item_sequence = self._events.groupby('user_id')[['item_id', 'time']]\
+        user_item_sequence = self._events.groupby('user_id')[['item_id', 'time']] \
             .apply(lambda x: make_item_time_pair(x)).reset_index().rename(columns={0: 'item_sequence'})
         return dict(zip(user_item_sequence['user_id'], user_item_sequence['item_sequence']))
 
@@ -69,7 +69,7 @@ class ItemBasedI2I(I2I):
         full_i2i_items
         cut_full_i2i_items = {
             left_item: sorted(full_i2i_items[left_item].items(), key=lambda item: item[1], reverse=True)[
-                             :cut_size]
+                       :cut_size]
             for left_item in full_i2i_items
         }
         return cut_full_i2i_items

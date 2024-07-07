@@ -1,5 +1,19 @@
-from sklearn.feature_extraction.text import CountVectorizer
+import logging
+
+import jieba
+import requests
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+sent_transformer = None
+try:
+    from sentence_transformers import SentenceTransformer
+
+    sent_transformer = SentenceTransformer('bert-base-chinese')
+except ImportError as ie:
+    logging.warn("import sentence transformer failed")
+except requests.exceptions.ProxyError as pe:
+    logging.warn("cannot connect to huggingface")
 
 
 def id_feature(id, sparse=False):
@@ -12,8 +26,21 @@ def num_feature(num):
     return num_scaler.fit_transform(num)
 
 
-def multi_value_feature(multi_value):
-    vectorizer = CountVectorizer()
+def vector_feature(text):
+    raise sent_transformer
+    return sent_transformer.encode(text)
+
+
+def text_feature(text):
+    vectorizer = TfidfVectorizer(tokenizer=lambda x: jieba.lcut(x))
+    return vectorizer.fit_transform(text)
+
+
+def multi_value_feature(multi_value, tokenizer=None):
+    if tokenizer:
+        vectorizer = CountVectorizer(tokenizer=tokenizer)
+    else:
+        vectorizer = CountVectorizer()
     return vectorizer.fit_transform(multi_value).toarray()
 
 

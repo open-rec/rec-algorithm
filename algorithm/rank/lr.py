@@ -33,6 +33,7 @@ class EventDataSet(Dataset):
             .merge(self.item_feature.items, left_on="item_id", right_on="id")
         self.events = merge_events[merge_events["type"].isin(["click", "expose"])]
         self.labels = self.events["type"].apply(lambda x: 1 if x == "click" else 0)
+
         user_features = np.hstack([
             # too big to build tensor
             # self.user_feature.id,
@@ -48,9 +49,11 @@ class EventDataSet(Dataset):
         item_features = np.hstack([
             # too big to build tensor
             # self.item_feature.id,
-            self.item_feature.title,
+
+            # cost too much memory
+            # self.item_feature.title,
+            # self.item_feature.tags,
             self.item_feature.category,
-            self.item_feature.tags,
             self.item_feature.scene,
             self.item_feature.weight,
         ])

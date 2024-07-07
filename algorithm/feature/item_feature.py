@@ -1,6 +1,13 @@
 import abc
+import re
 
-from algorithm.feature.feature import id_feature, num_feature, bool_feature, multi_value_feature
+from algorithm.feature.feature import (
+    id_feature,
+    num_feature,
+    bool_feature,
+    multi_value_feature,
+    text_feature,
+)
 
 
 class ItemFeature(abc.ABC):
@@ -23,15 +30,15 @@ class ItemFeature(abc.ABC):
 
     @property
     def title(self):
-        return id_feature(self._items[["title"]])
+        return text_feature(self._items[["title"]])
 
     @property
     def category(self):
-        return id_feature(self._items[["category"]])
+        return multi_value_feature(self._items["category"].fillna(""), tokenizer=lambda x: re.split("/", x))
 
     @property
     def tags(self):
-        return multi_value_feature(self._items["tags"])
+        return multi_value_feature(self._items["tags"].fillna(""), tokenizer=lambda x: re.split("/", x))
 
     @property
     def scene(self):
