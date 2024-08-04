@@ -12,8 +12,10 @@ try:
     sent_transformer = SentenceTransformer('bert-base-chinese')
 except ImportError as ie:
     logging.warn("import sentence transformer failed")
-except requests.exceptions.ProxyError as pe:
+except (requests.exceptions.ProxyError, EnvironmentError) as pe:
     logging.warn("cannot connect to huggingface")
+except Exception as e:
+    logging.error(f"unknown error, load sent transformer failed: {e}")
 
 
 def id_feature(id, sparse=False):
@@ -41,6 +43,9 @@ def multi_value_feature(multi_value, tokenizer=None):
         vectorizer = CountVectorizer(tokenizer=tokenizer)
     else:
         vectorizer = CountVectorizer()
+
+    if len(multi_value.values) and type(multi_value.values[0]) is list:
+        multi_value = multi_value.apply(lambda x: " ".join(x))
     return vectorizer.fit_transform(multi_value).toarray()
 
 

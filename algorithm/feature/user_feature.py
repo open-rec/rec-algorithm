@@ -1,3 +1,4 @@
+import re
 import abc
 
 import numpy as np
@@ -64,7 +65,7 @@ class UserFeature(abc.ABC):
 
     @property
     def tags(self):
-        return multi_value_feature(self._users["tags"])
+        return multi_value_feature(self._users["tags"].fillna(""), tokenizer=lambda x: re.split(",", x))
 
     @property
     def register_time(self):
