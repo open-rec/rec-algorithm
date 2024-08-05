@@ -13,7 +13,7 @@ def test_train():
     user_feature = UserFeature(users=users, events=events)
     item_feature = ItemFeature(items=items, events=events)
     lr_model = LRRecModel(user_feature=user_feature, item_feature=item_feature, events=events)
-    lr_model.train(epoch_num=3, batch_size=20)
+    lr_model.train(epoch_num=10, batch_size=256, learning_rate=0.003)
     lr_model.save()
 
 

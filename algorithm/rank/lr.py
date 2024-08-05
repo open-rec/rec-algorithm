@@ -89,6 +89,7 @@ class EventDataSet(Dataset):
 class LRModel(nn.Module):
     def __init__(self, dim=10):
         super().__init__()
+        self.dim = dim
         self.linear = nn.Linear(in_features=dim, out_features=1)
 
     def forward(self, x):
@@ -104,7 +105,6 @@ class LRRecModel(RecModel):
         self.model_file = str(model_path() / "lr.pth")
         self.model = LRModel(dim=self.dataset.feature_dim)
         self.sigmoid = nn.Sigmoid()
-        self.learning_rate = 0.01
 
     def score(self, user_id="", item_ids=[]):
         with torch.no_grad():
@@ -122,9 +122,9 @@ class LRRecModel(RecModel):
             score = self.model(torch.stack(batch_features))
         return score.squeeze().tolist()
 
-    def train(self, epoch_num=10, batch_size=5, shuffle=False):
+    def train(self, epoch_num=10, batch_size=100, shuffle=False, learning_rate=0.01):
         losser = nn.BCELoss()
-        optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         dataloader = DataLoader(dataset=self.dataset, batch_size=batch_size, shuffle=shuffle)
 
         for epoch in range(epoch_num):
