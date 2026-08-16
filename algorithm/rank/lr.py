@@ -79,11 +79,19 @@ class EventDataSet(Dataset):
         label = torch.tensor(self.labels.iloc[idx], dtype=torch.float32)
         return user_feature, item_feature, label
 
+    @property
+    def user_feature_width(self):
+        """Width of one user vector, needed to stand in for a user we have no features for."""
+        if not self.user_feature_map:
+            return 0
+        return len(next(iter(self.user_feature_map.values())))
+
     def user_feature_by_id(self, user_id):
-        return self.user_feature_map[user_id]
+        """None when unknown — scoring an id absent from the training data is expected, not fatal."""
+        return self.user_feature_map.get(user_id)
 
     def item_feature_by_id(self, item_id):
-        return self.item_feature_map[item_id]
+        return self.item_feature_map.get(item_id)
 
 
 class LRModel(nn.Module):
@@ -104,23 +112,40 @@ class LRRecModel(RecModel):
         self.dataset = EventDataSet(user_feature=user_feature, item_feature=item_feature, events=events)
         self.model_file = str(model_path() / "lr.pth")
         self.model = LRModel(dim=self.dataset.feature_dim)
-        self.sigmoid = nn.Sigmoid()
 
     def score(self, user_id="", item_ids=[]):
-        with torch.no_grad():
-            user_features = self.dataset.user_feature_by_id(user_id)
-            batch_features = []
-            for item_id in item_ids:
-                item_features = self.dataset.item_feature_by_id(item_id)
-                batch_features.append(torch.cat(
-                    (
-                        torch.tensor(user_features, dtype=torch.float32),
-                        torch.tensor(item_features, dtype=torch.float32)
-                    ),
-                    dim=0
-                ))
-            score = self.model(torch.stack(batch_features))
-        return score.squeeze().tolist()
+        """
+        Scores in the order given. An unknown user falls back to a zero vector and an unknown item
+        scores 0.0 instead of raising KeyError — the same degradation the online rank engine applies,
+        so offline and online agree on what happens to ids outside the training data.
+        """
+        if not item_ids:
+            return []
+
+        user_features = self.dataset.user_feature_by_id(user_id)
+        if user_features is None:
+            user_features = np.zeros(self.dataset.user_feature_width, dtype=np.float32)
+        user_tensor = torch.tensor(user_features, dtype=torch.float32)
+
+        scores = {}
+        batch_features, scored_ids = [], []
+        for item_id in item_ids:
+            item_features = self.dataset.item_feature_by_id(item_id)
+            if item_features is None:
+                scores[item_id] = 0.0
+                continue
+            batch_features.append(
+                torch.cat((user_tensor, torch.tensor(item_features, dtype=torch.float32)), dim=0))
+            scored_ids.append(item_id)
+
+        if batch_features:
+            with torch.no_grad():
+                # reshape rather than squeeze: squeeze collapses a single-item batch to a 0-dim
+                # tensor, whose tolist() hands back a bare float instead of a list
+                predictions = self.model(torch.stack(batch_features)).reshape(-1).tolist()
+            scores.update(zip(scored_ids, predictions))
+
+        return [scores[item_id] for item_id in item_ids]
 
     def train(self, epoch_num=10, batch_size=100, shuffle=False, learning_rate=0.01):
         losser = nn.BCELoss()
@@ -128,6 +153,7 @@ class LRRecModel(RecModel):
         dataloader = DataLoader(dataset=self.dataset, batch_size=batch_size, shuffle=shuffle)
 
         for epoch in range(epoch_num):
+            epoch_loss, batches = 0.0, 0
             for user, item, label in dataloader:
                 x = torch.cat((user, item), dim=1)
                 y_pred = self.model(x)
@@ -135,7 +161,14 @@ class LRRecModel(RecModel):
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-            print(f"epoch {epoch + 1}/{epoch_num}, loss:{loss.item():.4f}")
+                epoch_loss += loss.item()
+                batches += 1
+            # the mean over the epoch, not whatever the last batch happened to be; and no
+            # NameError when the dataset yields nothing
+            if batches:
+                print(f"epoch {epoch + 1}/{epoch_num}, loss:{epoch_loss / batches:.4f}")
+            else:
+                print(f"epoch {epoch + 1}/{epoch_num}, no batches — is the event data empty?")
 
     def save(self):
         torch.save(self.model.state_dict(), self.model_file)

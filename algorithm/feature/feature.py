@@ -11,9 +11,9 @@ try:
 
     sent_transformer = SentenceTransformer('bert-base-chinese')
 except ImportError as ie:
-    logging.warn("import sentence transformer failed")
+    logging.warning("import sentence transformer failed")
 except (requests.exceptions.ProxyError, EnvironmentError) as pe:
-    logging.warn("cannot connect to huggingface")
+    logging.warning("cannot connect to huggingface")
 except Exception as e:
     logging.error(f"unknown error, load sent transformer failed: {e}")
 
@@ -29,7 +29,12 @@ def num_feature(num):
 
 
 def vector_feature(text):
-    raise sent_transformer
+    # `raise sent_transformer` used to stand here: raising the model object instead of an exception
+    # is a guaranteed TypeError, and it also made the encode call below unreachable.
+    if sent_transformer is None:
+        raise RuntimeError(
+            "sentence transformer unavailable: install sentence-transformers and make sure "
+            "bert-base-chinese can be downloaded")
     return sent_transformer.encode(text)
 
 

@@ -66,12 +66,18 @@ implement a `dump_*` method used to write the offline tables.
 | i2i | `ItemBasedI2I` | item co-occurrence within a user's sequence, damped by `1/log(len+1)`, normalized by `sqrt(count_i * count_j)` |
 | embedding | `EventEmbedding` | word2vec (gensim) over per-user item sequences; `dump_vectors` exports 10-dim vectors |
 | hot | `Hot` | click counts normalized by the maximum |
-| new | `New` | `(pub_time / max_pub_time) ** 31`, so scores decay steeply with age |
+| new | `New` | freshness min-max normalized over the observed `pub_time` range, raised to `power` (31) |
 
-`ItemEntityEmbedding` (content-based item embeddings) is stubbed out and not implemented.
+`ItemEntityEmbedding` (content-based item embeddings) is not implemented; its methods raise
+`NotImplementedError`.
 
 All of them are computed **per scene** — group events by `scene` before constructing them, as
 `gen_recall_data.py` does. i2i and embedding require triggers; hot and new do not.
+
+Two behaviours worth knowing:
+
+- **i2i merges across triggers.** An item reachable from several triggers is emitted once, keeping its best score; triggers themselves are never recalled back; the result is truncated to `recall_size`. The similarity matrix is quadratic in sequence length, so it is computed once per instance and reused by `recall()` and `dump_i2i()`.
+- **embedding tolerates unknown triggers.** `min_count=5` keeps rare items out of the word2vec vocabulary, so a trigger may be absent; those are skipped, and a request where none are known returns an empty list rather than raising.
 
 ## rank
 
@@ -112,6 +118,14 @@ cd test/algorithm/rank   && pytest test_lr.py::test_inference  # reads it back
 ```
 
 They expect the dataset at `data/test/` relative to the repo root (see install above).
+
+`test_i2i_merge.py` is the exception: it stubs out the only pandas-backed method and asserts the
+recall contract (truncation, dedup across triggers, ordering, caching) on fixed sequences, so it
+needs neither the CSVs nor a particular working directory:
+
+```shell
+pytest test/algorithm/recall/test_i2i_merge.py
+```
 
 # data structure
 

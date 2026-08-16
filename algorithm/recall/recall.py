@@ -1,5 +1,9 @@
 import abc
 
+# Columns that together identify one event row. Used to drop duplicated rows before counting or
+# building sequences, so a row repeated in the source data does not inflate the result.
+EVENT_UNIQUE_COLUMNS = ['id', 'user_id', 'item_id', 'time', 'type', 'value']
+
 
 class Recall(abc.ABC):
 

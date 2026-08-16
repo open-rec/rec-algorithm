@@ -8,4 +8,10 @@ def root_path():
 
 
 def model_path():
-    return root_path() / "model/"
+    """
+    Where checkpoints are written. The directory is gitignored, so it does not exist on a fresh
+    clone — create it here rather than letting torch.save fail with FileNotFoundError.
+    """
+    path = root_path() / "model"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
