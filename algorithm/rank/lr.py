@@ -1,90 +1,112 @@
+from pathlib import Path
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from pandas import DataFrame
-from torch.utils.data import Dataset, DataLoader
+from sklearn.metrics import roc_auc_score
+from torch.utils.data import Dataset, DataLoader, random_split
 
+from algorithm.feature.feature_space import FeatureSpace
 from algorithm.feature.item_feature import ItemFeature
 from algorithm.feature.user_feature import UserFeature
 from algorithm.rank.model import RecModel
-from algorithm.utils.file_util import model_path
+from algorithm.utils.file_util import DEFAULT_SCENE, feature_path, rank_model_path
+
+CLICK = "click"
+EXPOSE = "expose"
+LABELLED_EVENTS = (CLICK, EXPOSE)
+
+MODEL_FILENAME = "lr.pth"
+FEATURE_FILENAME = "lr.features.json"
 
 
 class EventDataSet(Dataset):
+    """
+    (user vector, item vector, clicked) triples over the labelled events.
 
-    def __init__(self, user_feature: UserFeature = None, item_feature: ItemFeature = None, events: DataFrame = None):
+    Encoding is delegated to a `FeatureSpace` so the column layout can be persisted with the
+    checkpoint and reproduced by the rank engine, instead of being re-derived from whatever frame
+    each side happens to hold.
+    """
+
+    def __init__(self, user_feature: UserFeature = None, item_feature: ItemFeature = None,
+                 events: DataFrame = None, feature_space: FeatureSpace = None):
         self.user_feature = user_feature
         self.item_feature = item_feature
-        self.events = events
+        self.raw_events = events
+        self.events = None
+        self.space = None
         self.user_feature_map = None
         self.item_feature_map = None
         self.labels = None
         self.dim = 1
-        self.preprocess()
+        self.preprocess(feature_space)
 
     @property
     def feature_dim(self):
         return self.dim
 
-    def preprocess(self):
-        merge_events = self.events \
-            .merge(self.user_feature.users, left_on="user_id", right_on="id") \
-            .merge(self.item_feature.items, left_on="item_id", right_on="id")
-        self.events = merge_events[merge_events["type"].isin(["click", "expose"])]
-        self.labels = self.events["type"].apply(lambda x: 1 if x == "click" else 0)
+    @property
+    def feature_space(self):
+        return self.space
 
-        user_features = np.hstack([
-            # too big to build tensor
-            # self.user_feature.id,
-            # self.user_feature.device_id,
-            # self.user_feature.name,
-            self.user_feature.country,
-            self.user_feature.city,
-            self.user_feature.gender,
-            self.user_feature.age,
-            self.user_feature.tags,
-        ])
+    def preprocess(self, feature_space=None):
+        space = feature_space if feature_space is not None else FeatureSpace()
+        if not space.fitted:
+            space.fit(users=self.user_feature.users, items=self.item_feature.items)
+        self._bind(space)
 
-        item_features = np.hstack([
-            # too big to build tensor
-            # self.item_feature.id,
+        # Keep only labelled events whose user and item we can actually encode. This used to be an
+        # inner merge against both frames, which did the same filtering but also multiplied rows
+        # whenever an id repeated, and left id_x/id_y columns behind.
+        events = self.raw_events
+        keep = (
+            events["type"].isin(LABELLED_EVENTS)
+            & events["user_id"].isin(self.user_feature_map.keys())
+            & events["item_id"].isin(self.item_feature_map.keys())
+        )
+        self.events = events[keep].reset_index(drop=True)
+        self.labels = (self.events["type"] == CLICK).astype(np.float32)
 
-            # cost too much memory
-            # self.item_feature.title,
-            # self.item_feature.tags,
-            self.item_feature.category,
-            self.item_feature.scene,
-            self.item_feature.weight,
-        ])
+        # plain numpy for __getitem__: a DataFrame.iloc lookup per sample dominated data loading
+        self._user_ids = self.events["user_id"].to_numpy()
+        self._item_ids = self.events["item_id"].to_numpy()
+        self._label_values = self.labels.to_numpy()
 
-        self.user_feature_map = {
-            user_id: user_features[i]
-            for i, user_id in enumerate(self.user_feature.raw_id)
-        }
+    def _bind(self, space):
+        self.space = space
+        user_map, item_map = space.build_maps(users=self.user_feature.users,
+                                              items=self.item_feature.items)
+        self.user_feature_map = {k: v.astype(np.float32) for k, v in user_map.items()}
+        self.item_feature_map = {k: v.astype(np.float32) for k, v in item_map.items()}
+        self.dim = space.dim
 
-        self.item_feature_map = {
-            item_id: item_features[i]
-            for i, item_id in enumerate(self.item_feature.raw_id)
-        }
-        self.dim = user_features.shape[-1] + item_features.shape[-1]
+    def rebind_space(self, space):
+        """Re-encode against an already fitted space, e.g. the one saved with a checkpoint."""
+        self.preprocess(space)
 
     def __len__(self):
         return len(self.events)
 
     def __getitem__(self, idx):
-        event = self.events.iloc[idx]
-        user_feature = torch.tensor(self.user_feature_map[event["user_id"]], dtype=torch.float32)
-        item_feature = torch.tensor(self.item_feature_map[event["item_id"]], dtype=torch.float32)
-        label = torch.tensor(self.labels.iloc[idx], dtype=torch.float32)
+        user_feature = torch.from_numpy(self.user_feature_map[self._user_ids[idx]])
+        item_feature = torch.from_numpy(self.item_feature_map[self._item_ids[idx]])
+        label = torch.tensor(self._label_values[idx], dtype=torch.float32)
         return user_feature, item_feature, label
+
+    @property
+    def positive_rate(self):
+        """Share of clicks among the labelled events. 0.0 or 1.0 means there is nothing to learn."""
+        if not len(self._label_values):
+            return 0.0
+        return float(self._label_values.mean())
 
     @property
     def user_feature_width(self):
         """Width of one user vector, needed to stand in for a user we have no features for."""
-        if not self.user_feature_map:
-            return 0
-        return len(next(iter(self.user_feature_map.values())))
+        return self.space.user_width if self.space else 0
 
     def user_feature_by_id(self, user_id):
         """None when unknown — scoring an id absent from the training data is expected, not fatal."""
@@ -101,19 +123,57 @@ class LRModel(nn.Module):
         self.linear = nn.Linear(in_features=dim, out_features=1)
 
     def forward(self, x):
+        # a probability, not a logit: the rank engine POSTs to /model/score and uses this output
+        # directly as the score, so switching to BCEWithLogitsLoss would change that contract
         pred = torch.sigmoid(self.linear(x))
         return pred
 
 
 class LRRecModel(RecModel):
 
-    def __init__(self, user_feature=None, item_feature=None, events=None):
+    def __init__(self, user_feature=None, item_feature=None, events=None, feature_space=None,
+                 scene=DEFAULT_SCENE, model_file=None, feature_file=None):
+        """
+        Artifacts are filed per scene in the shared model store — `model/rank/{scene}/lr.pth` and
+        `model/feature/{scene}/lr.features.json` — so a trained model survives across runs and does
+        not collide with the pre-trained Douban checkpoint at the root of `model/rank`.
+
+        The feature space is kept out of the .pth deliberately: the rank engine loads that file with
+        a bare `load_state_dict(torch.load(...))`, so burying extra keys in it would break serving.
+        """
         super().__init__()
-        self.dataset = EventDataSet(user_feature=user_feature, item_feature=item_feature, events=events)
-        self.model_file = str(model_path() / "lr.pth")
+        self.scene = scene
+        self.model_file = str(model_file) if model_file else str(rank_model_path(scene) / MODEL_FILENAME)
+        self.feature_file = (str(feature_file) if feature_file
+                             else str(feature_path(scene) / FEATURE_FILENAME))
+
+        if feature_space is None and Path(self.feature_file).exists():
+            # reuse the persisted vocabulary rather than re-fitting encoders over the whole frame
+            feature_space = FeatureSpace.load(self.feature_file)
+
+        self.dataset = EventDataSet(user_feature=user_feature, item_feature=item_feature,
+                                    events=events, feature_space=feature_space)
         self.model = LRModel(dim=self.dataset.feature_dim)
 
-    def score(self, user_id="", item_ids=[]):
+    def exists(self):
+        """True when both artifacts are already on disk, so training can be skipped."""
+        return Path(self.model_file).exists() and Path(self.feature_file).exists()
+
+    def load_or_train(self, force=False, **train_kwargs):
+        """
+        Load the persisted model when there is one, otherwise train and persist it.
+
+        Returns True if it trained. `force=True` retrains and overwrites regardless.
+        """
+        if not force and self.exists():
+            self.load()
+            print(f"loaded {self.model_file} (dim {self.model.dim}); skipping training")
+            return False
+        self.train(**train_kwargs)
+        self.save()
+        return True
+
+    def score(self, user_id="", item_ids=None):
         """
         Scores in the order given. An unknown user falls back to a zero vector and an unknown item
         scores 0.0 instead of raising KeyError — the same degradation the online rank engine applies,
@@ -122,6 +182,7 @@ class LRRecModel(RecModel):
         if not item_ids:
             return []
 
+        self.model.eval()
         user_features = self.dataset.user_feature_by_id(user_id)
         if user_features is None:
             user_features = np.zeros(self.dataset.user_feature_width, dtype=np.float32)
@@ -147,12 +208,35 @@ class LRRecModel(RecModel):
 
         return [scores[item_id] for item_id in item_ids]
 
-    def train(self, epoch_num=10, batch_size=100, shuffle=False, learning_rate=0.01):
+    def train(self, epoch_num=10, batch_size=100, shuffle=True, learning_rate=0.01,
+              val_ratio=0.2, seed=42):
+        """
+        `shuffle` defaults to True: events arrive in whatever order the source data had, so
+        consecutive batches were strongly correlated.
+
+        A `val_ratio` slice is held out and scored with AUC each epoch, because BCE loss alone does
+        not tell you whether a CTR model ranks better than chance.
+        """
+        if not len(self.dataset):
+            print("no labelled events to train on — is the event data empty, or do its "
+                  "user_id/item_id values not appear in the user/item frames?")
+            return
+
+        positive_rate = self.dataset.positive_rate
+        if positive_rate in (0.0, 1.0):
+            # say it out loud: BCE will fall to ~0 against a constant predictor and AUC is
+            # undefined, so the run looks healthy while the model has learned nothing
+            print(f"warning: every labelled event carries the same label (click rate "
+                  f"{positive_rate:.0%}) — loss will collapse against a constant predictor and AUC "
+                  f"is undefined. Check that the event data holds both '{CLICK}' and '{EXPOSE}'.")
+
+        train_set, val_set = self._split(val_ratio=val_ratio, seed=seed)
         losser = nn.BCELoss()
         optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        dataloader = DataLoader(dataset=self.dataset, batch_size=batch_size, shuffle=shuffle)
+        dataloader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=shuffle)
 
         for epoch in range(epoch_num):
+            self.model.train()
             epoch_loss, batches = 0.0, 0
             for user, item, label in dataloader:
                 x = torch.cat((user, item), dim=1)
@@ -163,15 +247,62 @@ class LRRecModel(RecModel):
                 optimizer.step()
                 epoch_loss += loss.item()
                 batches += 1
+
             # the mean over the epoch, not whatever the last batch happened to be; and no
             # NameError when the dataset yields nothing
-            if batches:
-                print(f"epoch {epoch + 1}/{epoch_num}, loss:{epoch_loss / batches:.4f}")
-            else:
+            if not batches:
                 print(f"epoch {epoch + 1}/{epoch_num}, no batches — is the event data empty?")
+                continue
+            message = f"epoch {epoch + 1}/{epoch_num}, loss:{epoch_loss / batches:.4f}"
+            auc = self.evaluate(val_set, batch_size=batch_size)
+            if auc is not None:
+                message += f", val auc:{auc:.4f}"
+            print(message)
+
+    def _split(self, val_ratio=0.2, seed=42):
+        total = len(self.dataset)
+        val_size = int(total * val_ratio) if val_ratio else 0
+        if val_size <= 0 or val_size >= total:
+            return self.dataset, None
+        generator = torch.Generator().manual_seed(seed)
+        return random_split(self.dataset, [total - val_size, val_size], generator=generator)
+
+    def evaluate(self, dataset=None, batch_size=100):
+        """AUC over `dataset`, or None when it is empty or single-class (AUC is undefined then)."""
+        if dataset is None or not len(dataset):
+            return None
+        self.model.eval()
+        predictions, labels = [], []
+        with torch.no_grad():
+            for user, item, label in DataLoader(dataset=dataset, batch_size=batch_size):
+                predictions.extend(self.model(torch.cat((user, item), dim=1)).reshape(-1).tolist())
+                labels.extend(label.tolist())
+        if len(set(labels)) < 2:
+            return None
+        return roc_auc_score(labels, predictions)
 
     def save(self):
         torch.save(self.model.state_dict(), self.model_file)
+        # without the feature space the checkpoint is unusable: nothing else records what its
+        # columns mean, which is how the repo ended up with three different guesses at `dim`
+        self.dataset.feature_space.save(self.feature_file)
+        print(f"saved {self.model_file} and {self.feature_file} (dim {self.model.dim})")
 
     def load(self):
-        self.model.load_state_dict(torch.load(self.model_file))
+        feature_file = Path(self.feature_file)
+        if feature_file.exists():
+            # re-encode with the vocabulary the model was trained on, not one re-fitted on whatever
+            # frames this process happens to hold
+            self.dataset.rebind_space(FeatureSpace.load(feature_file))
+            if self.model.dim != self.dataset.feature_dim:
+                self.model = LRModel(dim=self.dataset.feature_dim)
+
+        state = torch.load(self.model_file, map_location="cpu")
+        checkpoint_dim = state["linear.weight"].shape[-1] if "linear.weight" in state else None
+        if checkpoint_dim is not None and checkpoint_dim != self.model.dim:
+            raise ValueError(
+                f"{self.model_file} was trained with dim={checkpoint_dim}, but the current feature "
+                f"space yields dim={self.model.dim}. Retrain, or point feature_file at the "
+                f"{FEATURE_FILENAME} this checkpoint was saved with.")
+        self.model.load_state_dict(state)
+        self.model.eval()
