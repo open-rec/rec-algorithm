@@ -2,4 +2,6 @@ torch==2.2.2
 pandas==1.4.2
 gensim
 scikit-learn
-numpy
+numpy<2  # torch 2.2.2 and pandas 1.4.2 both predate the numpy 2 ABI break
+jieba  # feature.text_feature
+# sentence-transformers is optional: only feature.vector_feature needs it, and it is loaded lazily

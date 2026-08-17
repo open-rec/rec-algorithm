@@ -30,7 +30,8 @@ class ItemFeature(abc.ABC):
 
     @property
     def title(self):
-        return text_feature(self._items[["title"]])
+        # single brackets: text_feature needs a Series of strings, not a one-column DataFrame
+        return text_feature(self._items["title"].fillna(""))
 
     @property
     def category(self):
