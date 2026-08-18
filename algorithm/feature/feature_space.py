@@ -24,6 +24,7 @@ import re
 
 import numpy as np
 import pandas as pd
+from algorithm.feature.event_feature import event_feature_columns
 
 # column kinds
 ID = "id"        # one-hot over the categories seen at fit time
@@ -151,22 +152,24 @@ class ColumnSpec(object):
 def _default_user_columns():
     # `id`/`device_id`/`name`/`phone` are deliberately absent: one-hotting them yields one column
     # per user, which is both useless to a linear model and too wide to build a tensor from.
-    return [
+    columns = [
         ColumnSpec("country", ID),
         ColumnSpec("city", ID),
         ColumnSpec("gender", BOOL),
         ColumnSpec("age", NUM),
         ColumnSpec("tags", MULTI),
     ]
+    return columns + [ColumnSpec(name, NUM) for name in event_feature_columns("item")]
 
 
 def _default_item_columns():
     # `title` and `tags` are omitted for the same reason: their vocabulary dwarfs the rest.
-    return [
+    columns = [
         ColumnSpec("category", MULTI),
         ColumnSpec("scene", ID),
         ColumnSpec("weight", NUM),
     ]
+    return columns + [ColumnSpec(name, NUM) for name in event_feature_columns("user")]
 
 
 class FeatureSpace(object):

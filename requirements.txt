@@ -1,7 +1,7 @@
-torch==2.2.2
-pandas==1.4.2
-gensim
-scikit-learn
-numpy<2  # torch 2.2.2 and pandas 1.4.2 both predate the numpy 2 ABI break
-jieba  # feature.text_feature
+torch==2.10.0  # Python 3.12; CUDA 12.8 runtime compatible with a CUDA 12.9 driver
+pandas==3.0.5
+gensim==4.4.0
+scikit-learn==1.9.0
+numpy==2.5.2
+jieba==0.42.1  # feature.text_feature
 # sentence-transformers is optional: only feature.vector_feature needs it, and it is loaded lazily

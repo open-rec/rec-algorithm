@@ -9,6 +9,7 @@ from algorithm.feature.feature import (
     text_feature,
 )
 from algorithm.feature.feature_space import DEFAULT_MULTI_SEP
+from algorithm.feature.event_feature import enrich_entity_features
 
 
 class ItemFeature(object):
@@ -18,9 +19,8 @@ class ItemFeature(object):
     has to agree with. Cached per instance; build a new one if `items` changes.
     """
 
-    def __init__(self, items=None, events=None):
-        self._items = items
-        # see UserFeature: kept for symmetry, behavioural features are not implemented yet
+    def __init__(self, items=None, events=None, as_of_time=None):
+        self._items = enrich_entity_features(items, events, "item", as_of_time)
         self._events = events
 
     @property

@@ -6,4 +6,5 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     author='xsank',
+    author_email='xsank@foxmail.com',
 )

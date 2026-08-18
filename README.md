@@ -98,10 +98,27 @@ lr_model.score("user_0", ["item_0", "item_1"])
 Labels come from the event type: `click` is 1, `expose` is 0; other types are dropped.
 
 Features used are deliberately a subset — country, city, gender, age and tags for users; category,
-scene and weight for items. Raw ids, names and titles are excluded because one-hot encoding them
-explodes the tensor size. The consequence: **the input dimension depends on the cardinality of your
-dataset**, so a checkpoint is only loadable against the data it was trained on. `rank-engine` requires
-you to pass that `dim` explicitly when loading.
+scene and weight for items — plus the event snapshot statistics described below. Raw ids, names and titles are excluded because one-hot encoding them
+explodes the tensor size. The categorical input dimension still depends on the training vocabulary,
+so `FeatureSpace` is saved beside every checkpoint and must be loaded by `rank-engine`.
+
+### materialize online features
+
+Create flat user/item snapshots that can be imported into the online `user:*` and `item:*` tables:
+
+```shell
+python tool/gen_feature_data.py \
+  --user ../example/data/test/user.csv \
+  --item ../example/data/test/item.csv \
+  --event ../example/data/test/event.csv \
+  --output data/feature/test
+```
+
+The output keeps all entity columns and adds event count/value statistics, active days, distinct
+scene and counterpart counts, first/last time, recency, 1/7/30-day counts, fixed event-type counts
+(`click`, `expose`, `buy`, `collect`, `stay`) and click rate. The default snapshot time is the newest
+event; production jobs should pass `--as-of-time` explicitly. Use a snapshot before the model label
+period to avoid target leakage.
 
 Serve a trained checkpoint with [rank-engine](https://github.com/open-rec/rank-engine); pre-trained
 Douban artifacts live in [model](https://github.com/open-rec/model).
@@ -176,4 +193,3 @@ pytest test/algorithm/recall/test_i2i_merge.py
 | time       | int    | yes      |                                        |  
 | is_login   | bool   | no       | could be recommend                     |  
 | ext_fields | json   | no       |                                        |  
-

@@ -5,6 +5,7 @@ import numpy as np
 
 from algorithm.feature.feature import id_feature, num_feature, multi_value_feature, bool_feature
 from algorithm.feature.feature_space import DEFAULT_MULTI_SEP
+from algorithm.feature.event_feature import enrich_entity_features
 
 
 class UserFeature(object):
@@ -20,10 +21,8 @@ class UserFeature(object):
     `fit_transform` passes over the frame. Build a new instance if `users` changes.
     """
 
-    def __init__(self, users=None, events=None):
-        self._users = users
-        # accepted for symmetry with ItemFeature and because callers already pass it; behavioural
-        # features (CTR, recency, event counts) would be derived from it, none are implemented yet
+    def __init__(self, users=None, events=None, as_of_time=None):
+        self._users = enrich_entity_features(users, events, "user", as_of_time)
         self._events = events
 
     @property
