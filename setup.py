@@ -7,4 +7,14 @@ setup(
     include_package_data=True,
     author='xsank',
     author_email='xsank@foxmail.com',
+    extras_require={
+        'spark': ['pyspark==3.5.3'],
+        'publish': ['redis>=5,<9', 'elasticsearch>=8,<9'],
+        'cluster': ['pyspark==3.5.3', 'redis>=5,<9', 'elasticsearch>=8,<9'],
+    },
+    entry_points={
+        'console_scripts': [
+            'openrec-spark-recall=jobs.spark.recall_job:main',
+        ],
+    },
 )

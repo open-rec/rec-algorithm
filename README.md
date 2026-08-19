@@ -1,7 +1,8 @@
 # rec-algorithm
 
 The offline side of open-rec: computes the recall tables and trains the rank model that the online
-service serves. Runs on one machine (pandas / gensim / torch); a distributed version is future work.
+service serves. It supports both one-machine development (pandas / gensim / torch) and scheduled
+cluster execution (Hive / Spark), with the same recall formulas and serving schemas.
 
 It plays two roles:
 
@@ -13,6 +14,15 @@ It plays two roles:
 ```shell
 pip install -r requirements.txt
 pip install -e .
+```
+
+Install only what the selected execution mode needs:
+
+```shell
+pip install -e .                 # local library development
+pip install -e ".[spark]"       # Hive/Spark jobs
+pip install -e ".[publish]"     # Redis/Elasticsearch publishing
+pip install -e ".[cluster]"     # complete distributed runtime
 ```
 
 Two directories are required at runtime and both are gitignored, so create them yourself:
@@ -41,6 +51,62 @@ bash package.sh                              # -> dist/rec_algorithm-0.0.1-*.whl
 | `algorithm/structure/` | `ScoreItem`, JSON helpers |
 | `tool/` | dataset generation and recall dumping scripts |
 | `test/` | pytest suites, doubling as usage examples |
+| `jobs/spark/` | distributed Hive readers, recall formulas and scheduled job CLI |
+| `publisher/` | Redis and Elasticsearch serving-layer publication |
+| `conf/` | cluster configuration examples |
+
+## execution modes
+
+Local mode remains the fast feedback path: existing classes under `algorithm/` accept pandas
+frames and produce `ScoreItem` objects or model artifacts. Spark mode is an execution layer, not a
+second algorithm library: it reads the Hive entity contract, applies the same deduplication and
+scoring rules, writes versionable Parquet/Hive results, and can publish them to the online stores.
+
+```text
+data-processor -> Hive ODS/DWD -> jobs.spark -> Hive/Parquet artifacts
+                                            -> Redis hot/new/i2i
+                                            -> Elasticsearch embeddings
+```
+
+Run with the cluster's Spark installation:
+
+```shell
+spark-submit --master spark://spark-master:7077 \
+  --py-files dist/rec_algorithm-0.0.1-py3-none-any.whl \
+  jobs/spark/recall_job.py hot \
+  --event-table openrec.event_entity \
+  --date 2026-08-18 --output-table openrec.recall_hot --size 2000 --publish
+
+spark-submit --master spark://spark-master:7077 \
+  --py-files dist/rec_algorithm-0.0.1-py3-none-any.whl \
+  jobs/spark/recall_job.py i2i \
+  --event-table openrec.event_entity \
+  --date 2026-08-18 --output-table openrec.recall_i2i --size 20 --publish
+
+spark-submit --master spark://spark-master:7077 \
+  --py-files dist/rec_algorithm-0.0.1-py3-none-any.whl \
+  jobs/spark/recall_job.py embedding \
+  --event-table openrec.event_entity \
+  --date 2026-08-18 --output-table openrec.recall_embedding --vector-size 64 --publish \
+  --es-password "$ELASTIC_PASSWORD" --es-ca-certs /path/to/ca.crt
+```
+
+Use `new` with `--item-table openrec.item_entity`. Output schemas are stable:
+
+- hot/new: `scene, item, score`
+- i2i: `scene, left_item, right_item, score`
+- embedding: `scene, item, vector`
+
+All source and result tables are partitioned by UTC `dt`. `--date` defaults to yesterday, so a
+daily scheduler can invoke the same command without calculating a date; passing it explicitly is
+recommended for backfills and reproducibility. The job registers only that Hive partition and sets
+dynamic partition overwrite, so rerunning one day replaces that result partition without rewriting
+other days.
+
+`jobs.spark.rank.labelled_interactions` performs the large join and deterministic train/validation
+split in Spark. PyTorch/FeatureSpace training remains the model contract so its checkpoint is still
+loadable by rank-engine; distributed sample preparation does not introduce an incompatible Spark
+ML model format.
 
 ## generate data
 
