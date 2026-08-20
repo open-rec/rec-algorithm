@@ -8,7 +8,7 @@ from pyspark.sql import functions as F
 
 from jobs.spark.io import read_events, read_items, write_result
 from jobs.spark.recall import embedding, hot, i2i, new
-from publisher.spark import publish_embedding, publish_redis
+from publisher.spark import publish_embedding, publish_recall
 
 
 def parser():
@@ -32,6 +32,10 @@ def parser():
     result.add_argument("--es-user", default="elastic")
     result.add_argument("--es-password")
     result.add_argument("--es-ca-certs")
+    result.add_argument("--revision", default="r001")
+    result.add_argument("--max-index-versions", "--retain-versions",
+                        dest="max_index_versions", type=int, default=2)
+    result.add_argument("--console-url", default="http://rec-console:8095")
     return result
 
 
@@ -59,7 +63,12 @@ def run(args, spark=None):
                               ca_certs=args.es_ca_certs,
                               verify_certs=bool(args.es_ca_certs))
         else:
-            publish_redis(output, args.algorithm, args.redis_host, args.redis_port)
+            publish_recall(output, args.algorithm, args.date, args.revision,
+                           [args.es_host], args.es_user, args.es_password,
+                           ca_certs=args.es_ca_certs,
+                           verify_certs=bool(args.es_ca_certs),
+                           console_url=args.console_url,
+                           max_index_versions=args.max_index_versions)
     return output
 
 

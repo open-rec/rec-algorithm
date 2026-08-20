@@ -36,7 +36,8 @@ def new(items, size=1000, power=31):
         (F.col("pub_time") - F.col("oldest")) / (F.col("newest") - F.col("oldest")))
     return frame.withColumn("score", F.pow(freshness, power)) \
         .withColumn("rank", F.row_number().over(ranked)).filter(F.col("rank") <= size) \
-        .select("scene", F.col("id").alias("item"), "score")
+        .select("scene", F.col("id").alias("item"), "score",
+                F.col("pub_time").cast("long").alias("publish_time"))
 
 
 def i2i(events, cut_size=20, event_type="click"):

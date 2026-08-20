@@ -64,7 +64,7 @@ scoring rules, writes versionable Parquet/Hive results, and can publish them to 
 
 ```text
 data-processor -> Hive ODS/DWD -> jobs.spark -> Hive/Parquet artifacts
-                                            -> Redis hot/new/i2i
+                                            -> versioned Elasticsearch hot/new/i2i
                                             -> Elasticsearch embeddings
 ```
 
@@ -94,6 +94,7 @@ spark-submit --master spark://spark-master:7077 \
 Use `new` with `--item-table openrec.item_entity`. Output schemas are stable:
 
 - hot/new: `scene, item, score`
+- new additionally carries `publish_time` for the online time-window filter
 - i2i: `scene, left_item, right_item, score`
 - embedding: `scene, item, vector`
 
@@ -102,6 +103,32 @@ daily scheduler can invoke the same command without calculating a date; passing 
 recommended for backfills and reproducibility. The job registers only that Hive partition and sets
 dynamic partition overwrite, so rerunning one day replaces that result partition without rewriting
 other days.
+
+With `--publish`, hot/new/i2i are staged as
+`openrec-recall-{algorithm}-{YYYYMMDD}-{revision}`. `rec-console` creates the staging index before
+Spark writes it, then verifies the document count, atomically moves
+`openrec-recall-{algorithm}-active`, and removes versions beyond the configured retention after the
+switch succeeds. The active version plus one previous physical index are retained by default. Use
+`--revision r002` for a rerun that must coexist with r001, and `--max-index-versions` to change the
+maximum number of loaded physical indexes. Scene remains a document field and query condition; it
+is never part of the physical index name.
+
+Publishing the same date and revision again is idempotent when its document count matches. An
+active physical index is never deleted or overwritten; use the next revision when recomputation
+changes its contents. Index creation, activation, retention and rollback belong to `rec-console`;
+this project only computes recall data and writes documents into the staging index authorized by
+the console. In cluster mode Airflow calls the internal `rec-algorithm-runner` service, which owns
+the Spark submission command while Airflow remains Docker-socket-free. Enable the
+`openrec_daily_recall` DAG for the `02:00 UTC` schedule, or trigger it with
+`{"revision":"r002"}` for a corrected daily release.
+
+Emergency rollback does not rerun Spark or reload documents. POST
+`{"algorithm":"i2i","target_index":"openrec-recall-i2i-20260819-r001"}` to the
+internal `rec-console` endpoint `/api/recall/releases/rollback`; it atomically moves only the
+active alias. When the target is omitted, the newest retained non-active index is selected.
+The same operation is exposed in the Airflow UI as the manual
+`openrec_recall_rollback` DAG. Trigger it with the same `algorithm` and optional `target_index`
+configuration.
 
 `jobs.spark.rank.labelled_interactions` performs the large join and deterministic train/validation
 split in Spark. PyTorch/FeatureSpace training remains the model contract so its checkpoint is still

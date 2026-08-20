@@ -1,0 +1,37 @@
+services:
+  rec-algorithm-runner:
+    build:
+      context: .
+      args:
+        SPARK_IMAGE: ${SPARK_IMAGE:-openrec/spark:3.5.3}
+    image: openrec/rec-algorithm:latest
+    container_name: rec-algorithm-runner
+    hostname: rec-algorithm-runner
+    restart: unless-stopped
+    command: ["python3", "-m", "jobs.spark.runner"]
+    environment:
+      SPARK_MASTER_URL: spark://spark-master:7077
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-openrec-es-password}
+      RECALL_RUNNER_PORT: 8090
+      REC_CONSOLE_URL: http://rec-console:8095
+    volumes:
+      - ../bigdata-platform/spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - openrec-hive-libs:/opt/hive-libs:ro
+    networks:
+      - openrec-bigdata
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  openrec-hive-libs:
+    external: true
+    name: openrec-hive-libs
+
+networks:
+  openrec-bigdata:
+    external: true
+    name: openrec-bigdata
