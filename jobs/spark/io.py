@@ -9,6 +9,7 @@ from pyspark.sql import Window
 EVENT_FIELDS = {
     "id": "string", "user_id": "string", "item_id": "string", "trace_id": "string",
     "scene": "string", "type": "string", "value": "string", "time": "long",
+    "ext_fields": "string",
 }
 ITEM_FIELDS = {
     "id": "string", "title": "string", "category": "string", "tags": "string",

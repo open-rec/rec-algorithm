@@ -1,6 +1,6 @@
 import pytest
 
-from jobs.spark.runner import rank_command, recall_command
+from jobs.spark.runner import analytics_command, rank_command, recall_command
 
 
 def test_runner_builds_versioned_es_publish_command(monkeypatch):
@@ -42,3 +42,12 @@ def test_rank_command_caps_spark_and_uses_cumulative_entity_paths():
     assert command[command.index("--user-path") + 1].endswith("/openrec/hive/user")
     assert command[command.index("--artifact-root") + 1] == "/models/releases"
     assert command[command.index("--min-auc") + 1] == "0.5"
+
+
+def test_analytics_command_caps_spark_and_filters_range():
+    command = analytics_command({"date_from": "2026-08-14", "date_to": "2026-08-21",
+                                 "scene": "scene_0"})
+    assert command[command.index("--total-executor-cores") + 1] == "4"
+    assert command[command.index("--date-from") + 1] == "2026-08-14"
+    assert command[command.index("--date-to") + 1] == "2026-08-21"
+    assert command[command.index("--scene") + 1] == "scene_0"

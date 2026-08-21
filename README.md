@@ -150,6 +150,10 @@ and hands the bounded prepared dataset to rank-engine for PyTorch training and e
 submissions default to four total executor cores (`RANK_SPARK_CORES=4`) and emit a version manifest
 for the Airflow `openrec_rank_model` publish task.
 
+`POST /jobs/analytics` runs the business dashboard aggregation with four Spark cores by default.
+It scans only the selected daily event partitions, de-duplicates mutation-envelope events by trace
+identity, and returns overall PV/UV CTR, PV/UV CVR, active items and GMV plus daily trend rows.
+
 `jobs.spark.rank.labelled_interactions` performs the large join against the same active item
 snapshot, excluding deleted-item samples before deterministic train/validation splitting.
 PyTorch/FeatureSpace training remains the model contract so its checkpoint is still

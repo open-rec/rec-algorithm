@@ -83,6 +83,28 @@ def rank_command(payload):
     ]
 
 
+def analytics_command(payload):
+    date_from, date_to = payload.get("date_from"), payload.get("date_to")
+    scene = payload.get("scene", "")
+    for value in (date_from, date_to):
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", value or ""):
+            raise ValueError("dates must use YYYY-MM-DD")
+    if date_from > date_to:
+        raise ValueError("date_from must not be after date_to")
+    if scene and not re.match(r"^[A-Za-z0-9_-]+$", scene):
+        raise ValueError("invalid scene")
+    return [
+        "/opt/spark/bin/spark-submit", "--master", os.environ.get(
+            "SPARK_MASTER_URL", "spark://spark-master:7077"),
+        "--deploy-mode", "client", "--total-executor-cores",
+        os.environ.get("ANALYTICS_SPARK_CORES", "4"), "--py-files",
+        "/opt/openrec/rec-algorithm.zip", "/opt/openrec/jobs/spark/analytics_job.py",
+        "--date-from", date_from, "--date-to", date_to,
+        "--event-path", os.environ.get(
+            "OPENREC_EVENT_PATH", "hdfs://namenode:8020/openrec/hive/event"),
+    ] + (["--scene", scene] if scene else [])
+
+
 class Handler(BaseHTTPRequestHandler):
     def _write(self, status, payload):
         body = json.dumps(payload).encode()
@@ -99,13 +121,15 @@ class Handler(BaseHTTPRequestHandler):
         self._write(200, {"status": "ok", "busy": JOB_LOCK.locked()})
 
     def do_POST(self):
-        if self.path not in ("/jobs/recall", "/jobs/rank/train"):
+        if self.path not in ("/jobs/recall", "/jobs/rank/train", "/jobs/analytics"):
             self._write(404, {"error": "not found"})
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
-            command = recall_command(payload) if self.path == "/jobs/recall" else rank_command(payload)
+            command = (recall_command(payload) if self.path == "/jobs/recall" else
+                       rank_command(payload) if self.path == "/jobs/rank/train" else
+                       analytics_command(payload))
         except (ValueError, TypeError, json.JSONDecodeError) as error:
             self._write(400, {"error": str(error)})
             return
@@ -125,6 +149,12 @@ class Handler(BaseHTTPRequestHandler):
                 if not lines:
                     self._write(500, {"error": "training manifest is missing"}); return
                 result["manifest"] = json.loads(lines[-1][len(marker):])
+            if self.path == "/jobs/analytics":
+                marker = "OPENREC_ANALYTICS="
+                lines = [line for line in process.stdout.splitlines() if line.startswith(marker)]
+                if not lines:
+                    self._write(500, {"error": "analytics result is missing"}); return
+                result["analytics"] = json.loads(lines[-1][len(marker):])
             self._write(200, result)
         except subprocess.TimeoutExpired as error:
             self._write(504, {"error": "spark job timed out", "output": (error.stdout or "")[-20000:]})
