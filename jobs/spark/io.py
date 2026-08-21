@@ -3,6 +3,7 @@
 import re
 
 from pyspark.sql import functions as F
+from pyspark.sql import Window
 
 
 EVENT_FIELDS = {
@@ -36,36 +37,80 @@ def _daily_partition(spark, table, date):
     spark.sql("ALTER TABLE %s ADD IF NOT EXISTS PARTITION (dt='%s')" % (table, date))
 
 
-def read_entity(spark, table, fields, date=None):
+def _validate_date_and_table(table, date):
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date or ""):
+        raise ValueError("date must use YYYY-MM-DD")
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_.]*$", table):
+        raise ValueError("invalid Hive table name: %s" % table)
+
+
+def read_entity(spark, table, fields, date=None, cumulative=False, keep_partition=False,
+                path=None):
     """Read either a typed Hive table or the ODS one-column JSON external table."""
-    if date:
-        _daily_partition(spark, table, date)
-    frame = spark.table(table)
-    if date:
+    if path:
+        if date and not re.match(r"^\d{4}-\d{2}-\d{2}$", date or ""):
+            raise ValueError("date must use YYYY-MM-DD")
+        frame = spark.read.option("basePath", path).text(path).withColumnRenamed("value", "json")
+        if date:
+            if "dt" not in frame.columns:
+                raise ValueError("path %s is not partitioned by dt" % path)
+            frame = frame.filter(F.col("dt") <= date if cumulative else F.col("dt") == date)
+    else:
+        if date:
+            _validate_date_and_table(table, date)
+            if cumulative:
+                # Streaming lands immutable dt directories directly in HDFS. Recover all directories
+                # before an as-of read so a first daily run also sees partitions from earlier days.
+                spark.sql("MSCK REPAIR TABLE %s" % table)
+            else:
+                _daily_partition(spark, table, date)
+        frame = spark.table(table)
+    if date and not path:
         if "dt" not in frame.columns:
             raise ValueError("table %s is not partitioned by dt" % table)
-        frame = frame.filter(F.col("dt") == date)
+        frame = frame.filter(F.col("dt") <= date if cumulative else F.col("dt") == date)
+    partition = [F.col("dt")] if keep_partition and "dt" in frame.columns else []
     if "json" not in frame.columns:
         missing = set(fields) - set(frame.columns)
         if missing:
             raise ValueError("table %s misses columns: %s" % (table, sorted(missing)))
-        return frame.select(*fields)
-    return frame.select(*[
+        return frame.select(*([F.col(name) for name in fields] + partition))
+    return frame.select(*([
         F.get_json_object("json", "$.%s" % JSON_NAMES.get(name, name)).cast(dtype).alias(name)
         for name, dtype in fields.items()
-    ])
+    ] + partition))
 
 
-def read_events(spark, table="openrec.event_entity", date=None):
-    return read_entity(spark, table, EVENT_FIELDS, date)
+def read_events(spark, table="openrec.event_entity", date=None, cumulative=False, path=None):
+    frame = read_entity(spark, table, EVENT_FIELDS, date, cumulative, cumulative, path)
+    if not cumulative:
+        return frame
+    fallback = F.sha2(F.concat_ws("|", "user_id", "item_id", "scene", "type",
+                                  F.col("time").cast("string")), 256)
+    keyed = frame.withColumn("_event_key", F.coalesce("trace_id", "id", fallback))
+    window = Window.partitionBy("_event_key").orderBy(F.desc("time"), F.desc("dt"))
+    return keyed.withColumn("_row", F.row_number().over(window)).filter("_row = 1") \
+        .drop("_event_key", "_row", "dt")
 
 
-def read_items(spark, table="openrec.item_entity", date=None):
-    return read_entity(spark, table, ITEM_FIELDS, date)
+def read_items(spark, table="openrec.item_entity", date=None, cumulative=False, path=None):
+    frame = read_entity(spark, table, ITEM_FIELDS, date, cumulative, cumulative, path)
+    if not cumulative:
+        return frame
+    window = Window.partitionBy("id").orderBy(F.desc_nulls_last("modify_time"),
+                                                F.desc_nulls_last("pub_time"), F.desc("dt"))
+    return frame.withColumn("_row", F.row_number().over(window)).filter("_row = 1") \
+        .drop("_row", "dt")
 
 
-def read_users(spark, table="openrec.user_entity", date=None):
-    return read_entity(spark, table, USER_FIELDS, date)
+def read_users(spark, table="openrec.user_entity", date=None, cumulative=False, path=None):
+    frame = read_entity(spark, table, USER_FIELDS, date, cumulative, cumulative, path)
+    if not cumulative:
+        return frame
+    window = Window.partitionBy("id").orderBy(F.desc_nulls_last("login_time"),
+                                                F.desc_nulls_last("register_time"), F.desc("dt"))
+    return frame.withColumn("_row", F.row_number().over(window)).filter("_row = 1") \
+        .drop("_row", "dt")
 
 
 def write_result(frame, table=None, path=None, mode="overwrite", partition_by=("dt",)):

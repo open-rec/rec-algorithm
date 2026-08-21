@@ -94,31 +94,67 @@ def publish_redis(frame, kind, host="redis", port=6379, password=None):
 
 
 def publish_embedding(frame, hosts, user=None, password=None, verify_certs=True,
-                      ca_certs=None, index_suffix="item-vector-index"):
-    """Replace per-scene vector indexes consumed by rec-server's EmbeddingNode."""
-    scenes = [(row.scene, len(row.vector)) for row in frame.select("scene", "vector")
-              .groupBy("scene").first().collect()]
+                      ca_certs=None, index_suffix="item-vector-index",
+                      business_date=None, revision="r001", max_index_versions=2):
+    """Publish versioned per-scene vectors and atomically switch serving aliases."""
+    version = (business_date or "legacy").replace("-", "")
+    from pyspark.sql import functions as F
+    scenes = [(row.scene, len(row.vector), row.documents)
+              for row in frame.select("scene", "vector").groupBy("scene").agg(
+                  F.first("vector").alias("vector"),
+                  F.count(F.lit(1)).alias("documents")).collect()]
+    if not scenes:
+        raise ValueError("refusing to publish an empty embedding table")
     from elasticsearch import Elasticsearch
     client = Elasticsearch(hosts, basic_auth=(user, password) if user else None,
                            verify_certs=verify_certs, ca_certs=ca_certs)
-    for scene, dim in scenes:
-        name = "%s-%s" % (scene, index_suffix)
-        if client.indices.exists(index=name):
-            client.indices.delete(index=name)
-        client.indices.create(index=name, mappings={"properties": {
+    indexes = {}
+    for scene, dim, _ in scenes:
+        alias = "%s-%s" % (scene, index_suffix)
+        name = "%s-%s-%s" % (alias, version, revision)
+        indexes[scene] = name
+        if not client.indices.exists(index=name):
+            client.indices.create(index=name, mappings={"properties": {
             "id": {"type": "keyword"},
             "vector": {"type": "dense_vector", "dims": dim, "index": True,
                        "similarity": "cosine"},
-        }})
+            }})
     client.close()
 
     def write(rows):
         from elasticsearch import Elasticsearch, helpers
         es = Elasticsearch(hosts, basic_auth=(user, password) if user else None,
                            verify_certs=verify_certs, ca_certs=ca_certs)
-        actions = ({"_index": "%s-%s" % (row.scene, index_suffix), "_id": row.item,
+        actions = ({"_index": indexes[row.scene], "_id": row.item,
                     "_source": {"id": row.item, "vector": list(row.vector)}} for row in rows)
         helpers.bulk(es, actions)
         es.close()
 
     frame.repartition("scene").foreachPartition(write)
+
+    client = Elasticsearch(hosts, basic_auth=(user, password) if user else None,
+                           verify_certs=verify_certs, ca_certs=ca_certs)
+    for scene, _, expected in scenes:
+        alias = "%s-%s" % (scene, index_suffix)
+        index = indexes[scene]
+        client.indices.refresh(index=index)
+        actual = int(client.count(index=index)["count"])
+        if actual != expected:
+            client.close()
+            raise RuntimeError("embedding index %s has %d documents, expected %d" %
+                               (index, actual, expected))
+        old = []
+        if client.indices.exists_alias(name=alias):
+            old = list(client.indices.get_alias(name=alias).keys())
+        actions = [{"remove": {"index": name, "alias": alias}} for name in old]
+        # Migrate the legacy concrete serving index to an alias in the same
+        # atomic cluster-state update, so rec-server never observes a gap.
+        if not old and client.indices.exists(index=alias):
+            actions.append({"remove_index": {"index": alias}})
+        actions.append({"add": {"index": index, "alias": alias}})
+        client.indices.update_aliases(actions=actions)
+        matching = sorted(client.indices.get(index=alias + "-*").keys(), reverse=True)
+        for obsolete in matching[max_index_versions:]:
+            if obsolete != index:
+                client.indices.delete(index=obsolete)
+    client.close()

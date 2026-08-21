@@ -16,6 +16,8 @@ def parser():
     result.add_argument("algorithm", choices=("hot", "new", "i2i", "embedding"))
     result.add_argument("--event-table", default="openrec.event_entity")
     result.add_argument("--item-table", default="openrec.item_entity")
+    result.add_argument("--event-path")
+    result.add_argument("--item-path")
     result.add_argument("--output-table")
     result.add_argument("--output-path")
     result.add_argument("--mode", default="overwrite", choices=("overwrite", "append"))
@@ -44,9 +46,11 @@ def run(args, spark=None):
         .enableHiveSupport().getOrCreate()
     spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
     if args.algorithm == "new":
-        output = new(read_items(spark, args.item_table, args.date), args.size)
+        output = new(read_items(spark, args.item_table, args.date, cumulative=True,
+                                path=args.item_path), args.size)
     else:
-        events = read_events(spark, args.event_table, args.date)
+        events = read_events(spark, args.event_table, args.date, cumulative=True,
+                             path=args.event_path)
         if args.algorithm == "hot":
             output = hot(events, args.size, args.event_type)
         elif args.algorithm == "i2i":
@@ -61,7 +65,9 @@ def run(args, spark=None):
         if args.algorithm == "embedding":
             publish_embedding(output, [args.es_host], args.es_user, args.es_password,
                               ca_certs=args.es_ca_certs,
-                              verify_certs=bool(args.es_ca_certs))
+                              verify_certs=bool(args.es_ca_certs),
+                              business_date=args.date, revision=args.revision,
+                              max_index_versions=args.max_index_versions)
         else:
             publish_recall(output, args.algorithm, args.date, args.revision,
                            [args.es_host], args.es_user, args.es_password,

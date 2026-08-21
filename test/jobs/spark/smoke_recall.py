@@ -55,7 +55,13 @@ def main():
     output_path = root + "/hot"
     daily_json = json.dumps({"id": "daily-1", "userId": "u1", "itemId": "a",
                              "time": 1700000000, "type": "click", "value": "1", "scene": "home"})
-    spark.createDataFrame([(daily_json, "2023-11-14")], ["json", "dt"]).write \
+    previous_version = json.dumps({"id": "daily-1", "userId": "u1", "itemId": "b",
+                                   "time": 1699900000, "type": "click", "value": "1", "scene": "home"})
+    historical = json.dumps({"id": "historical-2", "userId": "u2", "itemId": "c",
+                             "time": 1699900001, "type": "click", "value": "1", "scene": "home"})
+    spark.createDataFrame([(previous_version, "2023-11-13"),
+                           (historical, "2023-11-13"), (daily_json, "2023-11-14")],
+                          ["json", "dt"]).write \
         .partitionBy("dt").mode("overwrite").text(source_path)
     spark.sql("CREATE DATABASE IF NOT EXISTS openrec_smoke")
     spark.sql("DROP TABLE IF EXISTS openrec_smoke.event_entity")
@@ -63,6 +69,9 @@ def main():
               "PARTITIONED BY (dt STRING) STORED AS TEXTFILE LOCATION '%s'" % source_path)
     daily = read_events(spark, "openrec_smoke.event_entity", "2023-11-14")
     assert daily.count() == 1 and daily.first().item_id == "a"
+    cumulative = read_events(spark, "openrec_smoke.event_entity", "2023-11-14", cumulative=True)
+    assert cumulative.count() == 2, cumulative.collect()
+    assert {row.item_id for row in cumulative.collect()} == {"a", "c"}
     write_result(hot(daily, 10).withColumn("dt", F.lit("2023-11-14")),
                  path=output_path)
     assert spark.read.parquet(output_path).filter("dt = '2023-11-14'").count() == 1

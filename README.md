@@ -100,9 +100,14 @@ Use `new` with `--item-table openrec.item_entity`. Output schemas are stable:
 
 All source and result tables are partitioned by UTC `dt`. `--date` defaults to yesterday, so a
 daily scheduler can invoke the same command without calculating a date; passing it explicitly is
-recommended for backfills and reproducibility. The job registers only that Hive partition and sets
-dynamic partition overwrite, so rerunning one day replaces that result partition without rewriting
-other days.
+recommended for backfills and reproducibility. Source reads use the cumulative warehouse snapshot
+through `--date`, not just that day's partition: events are de-duplicated and accumulated, while
+items are collapsed to their latest version by `modify_time`, `pub_time`, then partition date.
+In cluster mode the runner reads the daily ODS directories directly with `--event-path` and
+`--item-path`. This preserves Hive-style partition discovery while avoiding the incompatible Hive 4
+metastore API in Spark 3.5. Result data is written beneath `--output-path`, remains partitioned by
+the requested day, and uses dynamic partition overwrite so rerunning one day does not rewrite other
+result partitions. Table-based reads and writes remain available for compatible metastores.
 
 With `--publish`, hot/new/i2i are staged as
 `openrec-recall-{algorithm}-{YYYYMMDD}-{revision}`. `rec-console` creates the staging index before
@@ -113,6 +118,11 @@ switch succeeds. The active version plus one previous physical index are retaine
 maximum number of loaded physical indexes. Scene remains a document field and query condition; it
 is never part of the physical index name.
 
+Embedding publishes one versioned physical index per scene as
+`{scene}-item-vector-index-{YYYYMMDD}-{revision}` and atomically moves the legacy serving name
+`{scene}-item-vector-index` as an alias after document-count validation. The previous version is
+retained for rollback instead of deleting the active vector index before a replacement is ready.
+
 Publishing the same date and revision again is idempotent when its document count matches. An
 active physical index is never deleted or overwritten; use the next revision when recomputation
 changes its contents. Index creation, activation, retention and rollback belong to `rec-console`;
@@ -121,6 +131,8 @@ the console. In cluster mode Airflow calls the internal `rec-algorithm-runner` s
 the Spark submission command while Airflow remains Docker-socket-free. Enable the
 `openrec_daily_recall` DAG for the `02:00 UTC` schedule, or trigger it with
 `{"revision":"r002"}` for a corrected daily release.
+Each submitted runner job is capped at four Spark cores by default; set `RECALL_SPARK_CORES` for a
+different deployment policy. Worker capacity itself is not artificially capped.
 
 Emergency rollback does not rerun Spark or reload documents. POST
 `{"algorithm":"i2i","target_index":"openrec-recall-i2i-20260819-r001"}` to the

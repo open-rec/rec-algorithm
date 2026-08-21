@@ -8,7 +8,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-ALGORITHMS = ("hot", "new", "i2i")
+ALGORITHMS = ("hot", "new", "i2i", "embedding")
 JOB_LOCK = threading.Lock()
 
 
@@ -17,7 +17,7 @@ def recall_command(payload):
     business_date = payload.get("date")
     revision = payload.get("revision", "r001")
     if algorithm not in ALGORITHMS:
-        raise ValueError("algorithm must be hot, new or i2i")
+        raise ValueError("algorithm must be hot, new, i2i or embedding")
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
         raise ValueError("date must use YYYY-MM-DD")
     if not re.match(r"^r\d{3,}$", revision):
@@ -29,11 +29,17 @@ def recall_command(payload):
         "/opt/spark/bin/spark-submit",
         "--master", os.environ.get("SPARK_MASTER_URL", "spark://spark-master:7077"),
         "--deploy-mode", "client",
+        "--total-executor-cores", os.environ.get("RECALL_SPARK_CORES", "4"),
         "--py-files", "/opt/openrec/rec-algorithm.zip",
         "/opt/openrec/jobs/spark/recall_job.py", algorithm,
         "--date", business_date,
         "--revision", revision,
-        "--output-table", output_table,
+        "--event-path", os.environ.get(
+            "OPENREC_EVENT_PATH", "hdfs://namenode:8020/openrec/hive/event"),
+        "--item-path", os.environ.get(
+            "OPENREC_ITEM_PATH", "hdfs://namenode:8020/openrec/hive/item"),
+        "--output-path", os.environ.get(
+            "OPENREC_RECALL_PATH", "hdfs://namenode:8020/openrec/hive/recall") + "/" + algorithm,
         "--publish",
         "--es-host", "https://elasticsearch:9200",
         "--es-user", "elastic",
@@ -41,6 +47,9 @@ def recall_command(payload):
         "--console-url", os.environ.get("REC_CONSOLE_URL", "http://rec-console:8095"),
         "--max-index-versions", str(payload.get("max_index_versions", 2)),
     ]
+    if algorithm == "embedding":
+        command.extend(["--vector-size", str(payload.get("vector_size", 10)),
+                        "--min-count", str(payload.get("min_count", 1))])
     if algorithm == "i2i":
         command.extend(["--size", str(payload.get("size", 20))])
     else:
