@@ -4,7 +4,7 @@ from pyspark.sql import functions as F
 
 
 def labelled_interactions(events, users, items):
-    """Join click/expose labels to raw entities without collecting the dataset to the driver."""
+    """Join labels to as-of entities; the item snapshot excludes latest DELETE tombstones."""
     labels = events.filter(F.col("type").isin("click", "expose")) \
         .withColumn("label", (F.col("type") == "click").cast("double"))
     user_columns = [F.col("u.%s" % name).alias("user_%s" % name)

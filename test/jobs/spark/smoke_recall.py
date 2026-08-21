@@ -11,7 +11,7 @@ from algorithm.recall.hot import Hot
 from algorithm.recall.i2i import ItemBasedI2I
 from algorithm.recall.new import New
 from jobs.spark.recall import embedding, hot, i2i, new
-from jobs.spark.io import read_events, write_result
+from jobs.spark.io import keep_active_item_events, read_events, read_items, write_result
 
 
 def main():
@@ -72,6 +72,24 @@ def main():
     cumulative = read_events(spark, "openrec_smoke.event_entity", "2023-11-14", cumulative=True)
     assert cumulative.count() == 2, cumulative.collect()
     assert {row.item_id for row in cumulative.collect()} == {"a", "c"}
+
+    item_source_path = root + "/item"
+    item_a = json.dumps({"schemaVersion": 1, "entityType": "item", "operation": "INSERT",
+                         "occurredAt": 1699900000000,
+                         "data": {"id": "a", "scene": "home", "pubTime": 1699900000}})
+    item_c = json.dumps({"schemaVersion": 1, "entityType": "item", "operation": "INSERT",
+                         "occurredAt": 1699900001000,
+                         "data": {"id": "c", "scene": "home", "pubTime": 1699900001}})
+    delete_c = json.dumps({"schemaVersion": 1, "entityType": "item", "operation": "DELETE",
+                           "occurredAt": 1700000000000, "data": {"id": "c"}})
+    spark.createDataFrame([(item_a, "2023-11-13"), (item_c, "2023-11-13"),
+                           (delete_c, "2023-11-14")], ["json", "dt"]).write \
+        .partitionBy("dt").mode("overwrite").text(item_source_path)
+    active_items = read_items(spark, date="2023-11-14", cumulative=True,
+                              path=item_source_path)
+    assert [row.id for row in active_items.select("id").collect()] == ["a"]
+    eligible_events = keep_active_item_events(cumulative, active_items)
+    assert [row.item_id for row in eligible_events.select("item_id").collect()] == ["a"]
     write_result(hot(daily, 10).withColumn("dt", F.lit("2023-11-14")),
                  path=output_path)
     assert spark.read.parquet(output_path).filter("dt = '2023-11-14'").count() == 1

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
-from jobs.spark.io import read_events, read_items, write_result
+from jobs.spark.io import keep_active_item_events, read_events, read_items, write_result
 from jobs.spark.recall import embedding, hot, i2i, new
 from publisher.spark import publish_embedding, publish_recall
 
@@ -45,12 +45,16 @@ def run(args, spark=None):
     spark = spark or SparkSession.builder.appName("openrec-%s" % args.algorithm) \
         .enableHiveSupport().getOrCreate()
     spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
+    # Build one as-of item snapshot for every recall algorithm. read_items resolves the latest
+    # mutation per id and removes DELETE tombstones before any expensive recall computation.
+    items = read_items(spark, args.item_table, args.date, cumulative=True,
+                       path=args.item_path)
     if args.algorithm == "new":
-        output = new(read_items(spark, args.item_table, args.date, cumulative=True,
-                                path=args.item_path), args.size)
+        output = new(items, args.size)
     else:
         events = read_events(spark, args.event_table, args.date, cumulative=True,
                              path=args.event_path)
+        events = keep_active_item_events(events, items)
         if args.algorithm == "hot":
             output = hot(events, args.size, args.event_type)
         elif args.algorithm == "i2i":

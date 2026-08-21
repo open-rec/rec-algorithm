@@ -75,10 +75,20 @@ def read_entity(spark, table, fields, date=None, cumulative=False, keep_partitio
         if missing:
             raise ValueError("table %s misses columns: %s" % (table, sorted(missing)))
         return frame.select(*([F.col(name) for name in fields] + partition))
+    payload = F.when(F.get_json_object("json", "$.schemaVersion").isNotNull(),
+                     F.get_json_object("json", "$.data")).otherwise(F.col("json"))
+    metadata = []
+    if keep_partition:
+        metadata = [
+            F.coalesce(F.get_json_object("json", "$.operation"), F.lit("INSERT"))
+                .alias("_operation"),
+            F.coalesce(F.get_json_object("json", "$.occurredAt").cast("long"), F.lit(0))
+                .alias("_mutation_time"),
+        ]
     return frame.select(*([
-        F.get_json_object("json", "$.%s" % JSON_NAMES.get(name, name)).cast(dtype).alias(name)
+        F.get_json_object(payload, "$.%s" % JSON_NAMES.get(name, name)).cast(dtype).alias(name)
         for name, dtype in fields.items()
-    ] + partition))
+    ] + partition + metadata))
 
 
 def read_events(spark, table="openrec.event_entity", date=None, cumulative=False, path=None):
@@ -88,29 +98,40 @@ def read_events(spark, table="openrec.event_entity", date=None, cumulative=False
     fallback = F.sha2(F.concat_ws("|", "user_id", "item_id", "scene", "type",
                                   F.col("time").cast("string")), 256)
     keyed = frame.withColumn("_event_key", F.coalesce("trace_id", "id", fallback))
-    window = Window.partitionBy("_event_key").orderBy(F.desc("time"), F.desc("dt"))
+    window = Window.partitionBy("_event_key").orderBy(
+        F.desc("_mutation_time"), F.desc("time"), F.desc("dt"))
     return keyed.withColumn("_row", F.row_number().over(window)).filter("_row = 1") \
-        .drop("_event_key", "_row", "dt")
+        .drop("_event_key", "_row", "dt", "_operation", "_mutation_time")
 
 
 def read_items(spark, table="openrec.item_entity", date=None, cumulative=False, path=None):
     frame = read_entity(spark, table, ITEM_FIELDS, date, cumulative, cumulative, path)
     if not cumulative:
         return frame
-    window = Window.partitionBy("id").orderBy(F.desc_nulls_last("modify_time"),
+    window = Window.partitionBy("id").orderBy(F.desc("_mutation_time"),
+                                                F.desc_nulls_last("modify_time"),
                                                 F.desc_nulls_last("pub_time"), F.desc("dt"))
-    return frame.withColumn("_row", F.row_number().over(window)).filter("_row = 1") \
-        .drop("_row", "dt")
+    return frame.withColumn("_row", F.row_number().over(window)).filter(
+        "_row = 1 AND _operation <> 'DELETE'").drop(
+        "_row", "dt", "_operation", "_mutation_time")
+
+
+def keep_active_item_events(events, items):
+    """Discard interactions whose item is absent from the as-of active item snapshot."""
+    active_ids = items.select(F.col("id").alias("_active_item_id")).dropDuplicates()
+    return events.join(active_ids, events.item_id == active_ids._active_item_id, "left_semi")
 
 
 def read_users(spark, table="openrec.user_entity", date=None, cumulative=False, path=None):
     frame = read_entity(spark, table, USER_FIELDS, date, cumulative, cumulative, path)
     if not cumulative:
         return frame
-    window = Window.partitionBy("id").orderBy(F.desc_nulls_last("login_time"),
+    window = Window.partitionBy("id").orderBy(F.desc("_mutation_time"),
+                                                F.desc_nulls_last("login_time"),
                                                 F.desc_nulls_last("register_time"), F.desc("dt"))
-    return frame.withColumn("_row", F.row_number().over(window)).filter("_row = 1") \
-        .drop("_row", "dt")
+    return frame.withColumn("_row", F.row_number().over(window)).filter(
+        "_row = 1 AND _operation <> 'DELETE'").drop(
+            "_row", "dt", "_operation", "_mutation_time")
 
 
 def write_result(frame, table=None, path=None, mode="overwrite", partition_by=("dt",)):

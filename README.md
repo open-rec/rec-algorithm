@@ -102,7 +102,9 @@ All source and result tables are partitioned by UTC `dt`. `--date` defaults to y
 daily scheduler can invoke the same command without calculating a date; passing it explicitly is
 recommended for backfills and reproducibility. Source reads use the cumulative warehouse snapshot
 through `--date`, not just that day's partition: events are de-duplicated and accumulated, while
-items are collapsed to their latest version by `modify_time`, `pub_time`, then partition date.
+items are collapsed to their latest mutation and latest `DELETE` tombstones are excluded. Every
+recall algorithm then semi-joins its events with this active item snapshot before scoring, so
+deleted items do not consume hot/i2i/embedding resources or get published online.
 In cluster mode the runner reads the daily ODS directories directly with `--event-path` and
 `--item-path`. This preserves Hive-style partition discovery while avoiding the incompatible Hive 4
 metastore API in Spark 3.5. Result data is written beneath `--output-path`, remains partitioned by
@@ -142,8 +144,9 @@ The same operation is exposed in the Airflow UI as the manual
 `openrec_recall_rollback` DAG. Trigger it with the same `algorithm` and optional `target_index`
 configuration.
 
-`jobs.spark.rank.labelled_interactions` performs the large join and deterministic train/validation
-split in Spark. PyTorch/FeatureSpace training remains the model contract so its checkpoint is still
+`jobs.spark.rank.labelled_interactions` performs the large join against the same active item
+snapshot, excluding deleted-item samples before deterministic train/validation splitting.
+PyTorch/FeatureSpace training remains the model contract so its checkpoint is still
 loadable by rank-engine; distributed sample preparation does not introduce an incompatible Spark
 ML model format.
 
