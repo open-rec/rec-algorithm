@@ -1,6 +1,6 @@
 import pytest
 
-from jobs.spark.runner import recall_command
+from jobs.spark.runner import rank_command, recall_command
 
 
 def test_runner_builds_versioned_es_publish_command(monkeypatch):
@@ -33,3 +33,12 @@ def test_runner_builds_versioned_es_publish_command(monkeypatch):
 def test_runner_rejects_invalid_job(payload):
     with pytest.raises(ValueError):
         recall_command(payload)
+
+
+def test_rank_command_caps_spark_and_uses_cumulative_entity_paths():
+    command = rank_command({"date": "2026-08-21", "revision": "r002",
+                            "scene": "scene_0", "epochs": 3, "min_auc": .5})
+    assert command[command.index("--total-executor-cores") + 1] == "4"
+    assert command[command.index("--user-path") + 1].endswith("/openrec/hive/user")
+    assert command[command.index("--artifact-root") + 1] == "/models/releases"
+    assert command[command.index("--min-auc") + 1] == "0.5"

@@ -14,9 +14,12 @@ services:
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-openrec-es-password}
       RECALL_RUNNER_PORT: 8090
       REC_CONSOLE_URL: http://rec-console:8095
+      MODEL_ARTIFACT_ROOT: /models/releases
+      RANK_ENGINE_URL: http://rank-engine:8123
     volumes:
       - ../bigdata-platform/spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
       - openrec-hive-libs:/opt/hive-libs:ro
+      - openrec-model-artifacts:/models
     networks:
       - openrec-bigdata
     healthcheck:
@@ -30,6 +33,8 @@ volumes:
   openrec-hive-libs:
     external: true
     name: openrec-hive-libs
+  openrec-model-artifacts:
+    name: openrec-model-artifacts
 
 networks:
   openrec-bigdata:

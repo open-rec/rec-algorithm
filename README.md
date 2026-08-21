@@ -144,6 +144,12 @@ The same operation is exposed in the Airflow UI as the manual
 `openrec_recall_rollback` DAG. Trigger it with the same `algorithm` and optional `target_index`
 configuration.
 
+The cluster runner also exposes internal `POST /jobs/rank/train`. Its Spark job reads cumulative
+event, item, and user partitions through `date`, joins interactions to the active item snapshot,
+and hands the bounded prepared dataset to rank-engine for PyTorch training and evaluation. Rank
+submissions default to four total executor cores (`RANK_SPARK_CORES=4`) and emit a version manifest
+for the Airflow `openrec_rank_model` publish task.
+
 `jobs.spark.rank.labelled_interactions` performs the large join against the same active item
 snapshot, excluding deleted-item samples before deterministic train/validation splitting.
 PyTorch/FeatureSpace training remains the model contract so its checkpoint is still

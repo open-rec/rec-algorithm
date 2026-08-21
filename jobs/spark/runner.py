@@ -57,6 +57,32 @@ def recall_command(payload):
     return command
 
 
+def rank_command(payload):
+    business_date = payload.get("date")
+    revision = payload.get("revision", "r001")
+    scene = payload.get("scene", "scene_0")
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
+        raise ValueError("date must use YYYY-MM-DD")
+    if not re.match(r"^r\d{3,}$", revision):
+        raise ValueError("revision must look like r001")
+    if not re.match(r"^[A-Za-z0-9_-]+$", scene):
+        raise ValueError("invalid scene")
+    return [
+        "/opt/spark/bin/spark-submit", "--master", os.environ.get(
+            "SPARK_MASTER_URL", "spark://spark-master:7077"),
+        "--deploy-mode", "client", "--total-executor-cores",
+        os.environ.get("RANK_SPARK_CORES", "4"), "--py-files",
+        "/opt/openrec/rec-algorithm.zip", "/opt/openrec/jobs/spark/rank_job.py",
+        "--date", business_date, "--revision", revision, "--scene", scene,
+        "--event-path", os.environ.get("OPENREC_EVENT_PATH", "hdfs://namenode:8020/openrec/hive/event"),
+        "--item-path", os.environ.get("OPENREC_ITEM_PATH", "hdfs://namenode:8020/openrec/hive/item"),
+        "--user-path", os.environ.get("OPENREC_USER_PATH", "hdfs://namenode:8020/openrec/hive/user"),
+        "--artifact-root", os.environ.get("MODEL_ARTIFACT_ROOT", "/models/releases"),
+        "--epochs", str(payload.get("epochs", 5)), "--min-auc", str(payload.get("min_auc", 0.0)),
+        "--max-events", str(payload.get("max_events", 200000)),
+    ]
+
+
 class Handler(BaseHTTPRequestHandler):
     def _write(self, status, payload):
         body = json.dumps(payload).encode()
@@ -73,13 +99,13 @@ class Handler(BaseHTTPRequestHandler):
         self._write(200, {"status": "ok", "busy": JOB_LOCK.locked()})
 
     def do_POST(self):
-        if self.path != "/jobs/recall":
+        if self.path not in ("/jobs/recall", "/jobs/rank/train"):
             self._write(404, {"error": "not found"})
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
-            command = recall_command(payload)
+            command = recall_command(payload) if self.path == "/jobs/recall" else rank_command(payload)
         except (ValueError, TypeError, json.JSONDecodeError) as error:
             self._write(400, {"error": str(error)})
             return
@@ -92,7 +118,14 @@ class Handler(BaseHTTPRequestHandler):
             if process.returncode != 0:
                 self._write(500, {"error": "spark job failed", "output": process.stdout[-20000:]})
                 return
-            self._write(200, {"status": "success", "output": process.stdout[-20000:]})
+            result = {"status": "success", "output": process.stdout[-20000:]}
+            if self.path == "/jobs/rank/train":
+                marker = "OPENREC_MODEL_MANIFEST="
+                lines = [line for line in process.stdout.splitlines() if line.startswith(marker)]
+                if not lines:
+                    self._write(500, {"error": "training manifest is missing"}); return
+                result["manifest"] = json.loads(lines[-1][len(marker):])
+            self._write(200, result)
         except subprocess.TimeoutExpired as error:
             self._write(504, {"error": "spark job timed out", "output": (error.stdout or "")[-20000:]})
         except ValueError as error:
