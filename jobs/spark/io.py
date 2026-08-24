@@ -30,6 +30,13 @@ JSON_NAMES = {
 }
 
 
+def _epoch_seconds(column):
+    """Normalize mutation envelopes (milliseconds) and entity/event fields (seconds)."""
+    value = F.col(column) if isinstance(column, str) else column
+    return F.when(value >= F.lit(100000000000), (value / F.lit(1000)).cast("long")) \
+        .otherwise(value.cast("long"))
+
+
 def _daily_partition(spark, table, date):
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date or ""):
         raise ValueError("date must use YYYY-MM-DD")
@@ -105,10 +112,18 @@ def read_events(spark, table="openrec.event_entity", date=None, cumulative=False
         .drop("_event_key", "_row", "dt", "_operation", "_mutation_time")
 
 
-def read_items(spark, table="openrec.item_entity", date=None, cumulative=False, path=None):
+def read_items(spark, table="openrec.item_entity", date=None, cumulative=False, path=None,
+               as_of_time=None):
     frame = read_entity(spark, table, ITEM_FIELDS, date, cumulative, cumulative, path)
     if not cumulative:
         return frame
+    if as_of_time is not None:
+        # Envelopes carry the authoritative mutation time. Legacy bare entities do not, so use the
+        # best available business timestamp to avoid selecting a profile version from the future.
+        effective_time = F.when(F.col("_mutation_time") > 0,
+                                _epoch_seconds("_mutation_time")) \
+            .otherwise(F.coalesce("modify_time", "pub_time", F.lit(0)))
+        frame = frame.filter(effective_time <= F.lit(as_of_time))
     window = Window.partitionBy("id").orderBy(F.desc("_mutation_time"),
                                                 F.desc_nulls_last("modify_time"),
                                                 F.desc_nulls_last("pub_time"), F.desc("dt"))
@@ -123,10 +138,16 @@ def keep_active_item_events(events, items):
     return events.join(active_ids, events.item_id == active_ids._active_item_id, "left_semi")
 
 
-def read_users(spark, table="openrec.user_entity", date=None, cumulative=False, path=None):
+def read_users(spark, table="openrec.user_entity", date=None, cumulative=False, path=None,
+               as_of_time=None):
     frame = read_entity(spark, table, USER_FIELDS, date, cumulative, cumulative, path)
     if not cumulative:
         return frame
+    if as_of_time is not None:
+        effective_time = F.when(F.col("_mutation_time") > 0,
+                                _epoch_seconds("_mutation_time")) \
+            .otherwise(F.coalesce("login_time", "register_time", F.lit(0)))
+        frame = frame.filter(effective_time <= F.lit(as_of_time))
     window = Window.partitionBy("id").orderBy(F.desc("_mutation_time"),
                                                 F.desc_nulls_last("login_time"),
                                                 F.desc_nulls_last("register_time"), F.desc("dt"))

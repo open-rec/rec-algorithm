@@ -45,19 +45,34 @@ def _validate(args):
         raise ValueError("factor_dim must be between 1 and 256")
 
 
+def _freeze_feature_history(all_events, labelled_events):
+    """Return a strictly-prior feature population and its auditable cutoff."""
+    cutoff = labelled_events.agg(F.min("time").alias("cutoff")).first()["cutoff"]
+    if cutoff is None:
+        raise ValueError("rank training data has no labelled events")
+    return all_events.filter(F.col("time") < F.lit(cutoff)), cutoff
+
+
 def run(args, spark=None):
     _validate(args)
     spark = spark or SparkSession.builder.appName("openrec-rank-train").enableHiveSupport().getOrCreate()
-    events = read_events(spark, date=args.date, cumulative=True, path=args.event_path) \
+    all_events = read_events(spark, date=args.date, cumulative=True, path=args.event_path)
+    events = all_events \
         .filter((F.col("scene") == args.scene) & F.col("type").isin("click", "expose")) \
         .orderBy(F.desc("time")).limit(args.max_events)
-    items = read_items(spark, date=args.date, cumulative=True, path=args.item_path) \
-        .filter(F.col("scene") == args.scene)
-    users = read_users(spark, date=args.date, cumulative=True, path=args.user_path)
+
+    # One frozen, strictly-prior snapshot is shared by all samples in this training run. This is a
+    # deliberately conservative point-in-time contract: neither a label event itself nor any later
+    # train/validation event can enter its behavioural features.
+    feature_events, feature_cutoff_time = _freeze_feature_history(all_events, events)
+    items = read_items(spark, date=args.date, cumulative=True, path=args.item_path,
+                       as_of_time=feature_cutoff_time).filter(F.col("scene") == args.scene)
+    users = read_users(spark, date=args.date, cumulative=True, path=args.user_path,
+                       as_of_time=feature_cutoff_time)
     active_events = events.join(items.select(F.col("id").alias("active_item")),
                                 events.item_id == F.col("active_item"), "left_semi")
-
-    event_frame, item_frame, user_frame = (active_events.toPandas(), items.toPandas(), users.toPandas())
+    event_frame, feature_event_frame, item_frame, user_frame = (
+        active_events.toPandas(), feature_events.toPandas(), items.toPandas(), users.toPandas())
     if event_frame.empty or item_frame.empty or user_frame.empty:
         raise ValueError("rank training data is empty after active entity filtering")
     version = "%s-%s" % (args.date.replace("-", ""), args.revision)
@@ -67,6 +82,8 @@ def run(args, spark=None):
     dataset_dir.mkdir(parents=True)
     try:
         event_frame.to_json(dataset_dir / "events.jsonl", orient="records", lines=True)
+        feature_event_frame.to_json(
+            dataset_dir / "feature_events.jsonl", orient="records", lines=True)
         item_frame.to_json(dataset_dir / "items.jsonl", orient="records", lines=True)
         user_frame.to_json(dataset_dir / "users.jsonl", orient="records", lines=True)
         payload = json.dumps({"scene": args.scene, "version": version,
@@ -75,7 +92,8 @@ def run(args, spark=None):
                               "batch_size": args.batch_size,
                               "validation_ratio": args.validation_ratio,
                               "min_auc": args.min_auc, "model_type": args.model_type,
-                              "factor_dim": args.factor_dim}).encode()
+                              "factor_dim": args.factor_dim,
+                              "feature_cutoff_time": int(feature_cutoff_time)}).encode()
         request = urllib.request.Request(os.environ.get(
             "RANK_ENGINE_URL", "http://rank-engine:8123") + "/model/train", data=payload,
             headers={"Content-Type": "application/json"}, method="POST")

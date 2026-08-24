@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from pandas import DataFrame
 from sklearn.metrics import roc_auc_score
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, Subset
 
 from algorithm.feature.feature_space import FeatureSpace
 from algorithm.feature.item_feature import ItemFeature
@@ -67,7 +67,11 @@ class EventDataSet(Dataset):
             & events["user_id"].isin(self.user_feature_map.keys())
             & events["item_id"].isin(self.item_feature_map.keys())
         )
-        self.events = events[keep].reset_index(drop=True)
+        self.events = events[keep].copy()
+        if "time" in self.events.columns:
+            # Stable chronological order is also the train/validation boundary used by _split.
+            self.events = self.events.sort_values("time", kind="mergesort")
+        self.events = self.events.reset_index(drop=True)
         self.labels = (self.events["type"] == CLICK).astype(np.float32)
 
         # plain numpy for __getitem__: a DataFrame.iloc lookup per sample dominated data loading
@@ -214,8 +218,8 @@ class LRRecModel(RecModel):
         `shuffle` defaults to True: events arrive in whatever order the source data had, so
         consecutive batches were strongly correlated.
 
-        A `val_ratio` slice is held out and scored with AUC each epoch, because BCE loss alone does
-        not tell you whether a CTR model ranks better than chance.
+        The newest `val_ratio` slice is held out and scored with AUC each epoch. A temporal holdout
+        avoids evaluating older events with a model trained on newer ones.
         """
         if not len(self.dataset):
             print("no labelled events to train on — is the event data empty, or do its "
@@ -264,8 +268,9 @@ class LRRecModel(RecModel):
         val_size = int(total * val_ratio) if val_ratio else 0
         if val_size <= 0 or val_size >= total:
             return self.dataset, None
-        generator = torch.Generator().manual_seed(seed)
-        return random_split(self.dataset, [total - val_size, val_size], generator=generator)
+        boundary = total - val_size
+        return (Subset(self.dataset, range(0, boundary)),
+                Subset(self.dataset, range(boundary, total)))
 
     def evaluate(self, dataset=None, batch_size=100):
         """AUC over `dataset`, or None when it is empty or single-class (AUC is undefined then)."""
