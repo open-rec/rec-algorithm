@@ -1,4 +1,4 @@
-"""Train and evaluate a versioned LR rank artifact from cumulative Hive entity data."""
+"""Train and evaluate a versioned rank artifact from cumulative Hive entity data."""
 
 import argparse
 import json
@@ -26,6 +26,8 @@ def parser():
     result.add_argument("--batch-size", type=int, default=256)
     result.add_argument("--validation-ratio", type=float, default=.2)
     result.add_argument("--min-auc", type=float, default=0.0)
+    result.add_argument("--model-type", choices=("lr", "fm"), default="lr")
+    result.add_argument("--factor-dim", type=int, default=8)
     result.add_argument("--max-events", type=int, default=200000)
     return result
 
@@ -39,6 +41,8 @@ def _validate(args):
         raise ValueError("scene contains unsupported characters")
     if not 0 <= args.min_auc <= 1 or not 0 < args.validation_ratio < 1:
         raise ValueError("invalid evaluation threshold or validation ratio")
+    if not 1 <= args.factor_dim <= 256:
+        raise ValueError("factor_dim must be between 1 and 256")
 
 
 def run(args, spark=None):
@@ -70,7 +74,8 @@ def run(args, spark=None):
                               "dataset_dir": str(dataset_dir), "epochs": args.epochs,
                               "batch_size": args.batch_size,
                               "validation_ratio": args.validation_ratio,
-                              "min_auc": args.min_auc}).encode()
+                              "min_auc": args.min_auc, "model_type": args.model_type,
+                              "factor_dim": args.factor_dim}).encode()
         request = urllib.request.Request(os.environ.get(
             "RANK_ENGINE_URL", "http://rank-engine:8123") + "/model/train", data=payload,
             headers={"Content-Type": "application/json"}, method="POST")

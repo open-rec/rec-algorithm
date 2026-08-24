@@ -200,6 +200,8 @@ Two behaviours worth knowing:
 ## rank
 
 `LRRecModel` wraps a torch logistic regression over concatenated user and item features.
+`FMRecModel` reuses that exact feature vector and training/scoring contract while learning
+second-order interactions in a compact latent space.
 
 ```python
 user_feature = UserFeature(users=users, events=events)
@@ -212,6 +214,20 @@ lr_model.save()                    # -> model/lr.pth
 lr_model.load()
 lr_model.score("user_0", ["item_0", "item_1"])
 ```
+
+To train FM instead:
+
+```python
+from algorithm.rank.fm import FMRecModel
+
+fm_model = FMRecModel(user_feature=user_feature, item_feature=item_feature,
+                      events=events, factor_dim=8)
+fm_model.train(epoch_num=10, batch_size=256, learning_rate=0.003)
+fm_model.save()                    # -> model/rank/default/fm.pth
+```
+
+The cluster rank job accepts `model_type=lr|fm` and `factor_dim` (FM only). Its release manifest
+keeps the model type and latent width so rec-console can atomically deploy or roll back either type.
 
 Labels come from the event type: `click` is 1, `expose` is 0; other types are dropped.
 

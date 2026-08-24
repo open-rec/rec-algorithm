@@ -61,12 +61,18 @@ def rank_command(payload):
     business_date = payload.get("date")
     revision = payload.get("revision", "r001")
     scene = payload.get("scene", "scene_0")
+    model_type = payload.get("model_type", "lr")
+    factor_dim = int(payload.get("factor_dim", 8))
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
         raise ValueError("date must use YYYY-MM-DD")
     if not re.match(r"^r\d{3,}$", revision):
         raise ValueError("revision must look like r001")
     if not re.match(r"^[A-Za-z0-9_-]+$", scene):
         raise ValueError("invalid scene")
+    if model_type not in ("lr", "fm"):
+        raise ValueError("model_type must be lr or fm")
+    if not 1 <= factor_dim <= 256:
+        raise ValueError("factor_dim must be between 1 and 256")
     return [
         "/opt/spark/bin/spark-submit", "--master", os.environ.get(
             "SPARK_MASTER_URL", "spark://spark-master:7077"),
@@ -79,6 +85,7 @@ def rank_command(payload):
         "--user-path", os.environ.get("OPENREC_USER_PATH", "hdfs://namenode:8020/openrec/hive/user"),
         "--artifact-root", os.environ.get("MODEL_ARTIFACT_ROOT", "/models/releases"),
         "--epochs", str(payload.get("epochs", 5)), "--min-auc", str(payload.get("min_auc", 0.0)),
+        "--model-type", model_type, "--factor-dim", str(factor_dim),
         "--max-events", str(payload.get("max_events", 200000)),
     ]
 
