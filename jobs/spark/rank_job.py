@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import urllib.request
 
@@ -57,18 +58,25 @@ def run(args, spark=None):
     _validate(args)
     spark = spark or SparkSession.builder.appName("openrec-rank-train").enableHiveSupport().getOrCreate()
     all_events = read_events(spark, date=args.date, cumulative=True, path=args.event_path)
+    business_day = datetime.strptime(args.date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    label_from = int(business_day.timestamp())
+    label_until = int((business_day + timedelta(days=1)).timestamp())
     events = all_events \
-        .filter((F.col("scene") == args.scene) & F.col("type").isin("click", "expose")) \
+        .filter((F.col("scene") == args.scene) & F.col("type").isin("click", "expose")
+                & (F.col("time") >= label_from) & (F.col("time") < label_until)) \
         .orderBy(F.desc("time")).limit(args.max_events)
 
     # One frozen, strictly-prior snapshot is shared by all samples in this training run. This is a
     # deliberately conservative point-in-time contract: neither a label event itself nor any later
     # train/validation event can enter its behavioural features.
     feature_events, feature_cutoff_time = _freeze_feature_history(all_events, events)
-    items = read_items(spark, date=args.date, cumulative=True, path=args.item_path,
-                       as_of_time=feature_cutoff_time).filter(F.col("scene") == args.scene)
-    users = read_users(spark, date=args.date, cumulative=True, path=args.user_path,
-                       as_of_time=feature_cutoff_time)
+    # Entity snapshots are the latest active state within the requested business date. Behavioural
+    # aggregates alone use the strictly-prior cutoff; filtering profiles by the first label time
+    # would incorrectly remove entities inserted earlier on the same day but processed milliseconds
+    # after a client-generated event timestamp.
+    items = read_items(spark, date=args.date, cumulative=True, path=args.item_path) \
+        .filter(F.col("scene") == args.scene)
+    users = read_users(spark, date=args.date, cumulative=True, path=args.user_path)
     active_events = events.join(items.select(F.col("id").alias("active_item")),
                                 events.item_id == F.col("active_item"), "left_semi")
     event_frame, feature_event_frame, item_frame, user_frame = (

@@ -1,0 +1,24 @@
+{
+  "name": "ranking-fm-v1",
+  "model_type": "fm",
+  "catalog_version": 1,
+  "user": [
+    "user.country", "user.city", "user.gender", "user.age", "user.tags",
+    "user.event_count", "user.event_value_sum", "user.event_value_mean",
+    "user.event_active_days", "user.event_unique_scene_count",
+    "user.event_unique_item_count", "user.event_first_time", "user.event_last_time",
+    "user.event_recency_seconds", "user.event_count_1d", "user.event_count_7d",
+    "user.event_count_30d", "user.event_click_count", "user.event_expose_count",
+    "user.event_buy_count", "user.event_collect_count", "user.event_stay_count",
+    "user.event_click_rate"
+  ],
+  "item": [
+    "item.category", "item.scene", "item.weight", "item.event_count",
+    "item.event_value_sum", "item.event_value_mean", "item.event_active_days",
+    "item.event_unique_scene_count", "item.event_unique_user_count",
+    "item.event_first_time", "item.event_last_time", "item.event_recency_seconds",
+    "item.event_count_1d", "item.event_count_7d", "item.event_count_30d",
+    "item.event_click_count", "item.event_expose_count", "item.event_buy_count",
+    "item.event_collect_count", "item.event_stay_count", "item.event_click_rate"
+  ]
+}

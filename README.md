@@ -145,7 +145,8 @@ The same operation is exposed in the Airflow UI as the manual
 configuration.
 
 The cluster runner also exposes internal `POST /jobs/rank/train`. Its Spark job reads cumulative
-event, item, and user partitions through `date`, joins interactions to the active item snapshot,
+event, item, and user partitions through `date`, uses click/expose labels from the requested UTC
+business day, joins interactions to the latest active entity snapshot for that date,
 and hands the bounded prepared dataset to rank-engine for PyTorch training and evaluation. Rank
 submissions default to four total executor cores (`RANK_SPARK_CORES=4`) and emit a version manifest
 for the Airflow `openrec_rank_model` publish task.
@@ -162,17 +163,19 @@ ML model format.
 
 ## generate data
 
-Both scripts write to `../data/...` and must be run from `tool/`:
+Generate deterministic raw inputs, then build the deployable model bundle:
 
 ```shell
-cd tool
-python gen_test_data.py       # synthetic user / item / event CSVs
-python gen_recall_data.py     # recall tables from those CSVs
+python tool/gen_test_data.py --output ../example/data/test --seed 42
+python -m tool.build_default_artifacts \
+  --data ../example/data/test --model-root ../model
 ```
 
-`gen_recall_data.py` has the hot / new / embedding generators **commented out** — only i2i runs by
-default. Uncomment the ones you need, and set the scene at the bottom of the file (`gen_scene_recall`
-defaults to `douban`).
+`gen_test_data.py` creates an impression funnel with expose, stay, click, collect and buy events.
+The conversion probability depends on user interests, item metadata, popularity and position, so
+rank and recall receive learnable rather than independent random signals. The artifact builder emits
+feature snapshots, fitted LR/FM feature spaces, both checkpoints, all recall tables and a hash
+manifest. `tool/gen_recall_data.py` remains available as a standalone CLI when only recall is needed.
 
 ## recall
 
@@ -227,14 +230,32 @@ fm_model.save()                    # -> model/rank/default/fm.pth
 ```
 
 The cluster rank job accepts `model_type=lr|fm` and `factor_dim` (FM only). Its release manifest
-keeps the model type and latent width so rec-console can atomically deploy or roll back either type.
+keeps the model type, latent width, feature-set identity, fitted input dimension and sidecar checksum
+so rec-console can validate and atomically deploy or roll back either type.
 
-Labels come from the event type: `click` is 1, `expose` is 0; other types are dropped.
+Labels come from the event type: `click` is 1 and an unclicked `expose` is 0. When an impression has
+both events, its expose remains available to behavioural aggregation but is not a negative label.
 
 Features used are deliberately a subset — country, city, gender, age and tags for users; category,
 scene and weight for items — plus the event snapshot statistics described below. Raw ids, names and titles are excluded because one-hot encoding them
 explodes the tensor size. The categorical input dimension still depends on the training vocabulary,
 so `FeatureSpace` is saved beside every checkpoint and must be loaded by `rank-engine`.
+
+### feature catalog and model feature sets
+
+`algorithm/feature/definitions/feature.catalog.json` is the global descriptive catalog for every
+entity and behavioural feature OpenRec currently produces. `lr.feature-set.json` and
+`fm.feature-set.json` independently select the catalog entries each model family trains on. The
+catalog and sets are training-time governance inputs only: they validate names, ownership, kinds,
+and the data-processor event-feature contract.
+
+Training fits the selected set against that version's data and writes a self-contained
+`lr.features.json` or `fm.features.json` beside the checkpoint. This fitted sidecar includes the
+ordered columns, category vocabularies, numeric normalization statistics, catalog/set provenance,
+and computed widths. Deployment never rereads the catalog or feature-set files; rank-engine uses
+only the immutable checkpoint and its fitted sidecar. Consequently an updated catalog cannot alter
+an already published model, and LR/FM may evolve their selections independently even when their
+current v1 sets contain the same features.
 
 ### materialize online features
 

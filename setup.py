@@ -5,6 +5,7 @@ setup(
     version='0.0.1',
     packages=find_packages(),
     include_package_data=True,
+    package_data={'algorithm.feature.definitions': ['*.json']},
     author='xsank',
     author_email='xsank@foxmail.com',
     extras_require={

@@ -62,9 +62,22 @@ class EventDataSet(Dataset):
         # inner merge against both frames, which did the same filtering but also multiplied rows
         # whenever an id repeated, and left id_x/id_y columns behind.
         events = self.raw_events
+        # A clicked impression normally has both expose and click events. Its expose is not a
+        # negative label: keep it in behavioural history but remove it from supervised labels.
+        labelled = events[events["type"].isin(LABELLED_EVENTS)].copy()
+        identity = (["trace_id"] if "trace_id" in labelled.columns
+                    and labelled["trace_id"].fillna("").astype(str).ne("").any()
+                    else ["user_id", "item_id"])
+        clicked = labelled[labelled["type"] == CLICK][identity].drop_duplicates()
+        if not clicked.empty:
+            clicked["_clicked_impression"] = True
+            labelled = labelled.merge(clicked, how="left", on=identity)
+            labelled = labelled[~((labelled["type"] == EXPOSE)
+                                  & labelled["_clicked_impression"].eq(True))]
+            labelled = labelled.drop(columns=["_clicked_impression"])
+        events = labelled
         keep = (
-            events["type"].isin(LABELLED_EVENTS)
-            & events["user_id"].isin(self.user_feature_map.keys())
+            events["user_id"].isin(self.user_feature_map.keys())
             & events["item_id"].isin(self.item_feature_map.keys())
         )
         self.events = events[keep].copy()
@@ -136,7 +149,7 @@ class LRModel(nn.Module):
 class LRRecModel(RecModel):
 
     def __init__(self, user_feature=None, item_feature=None, events=None, feature_space=None,
-                 scene=DEFAULT_SCENE, model_file=None, feature_file=None):
+                 scene=DEFAULT_SCENE, model_file=None, feature_file=None, model_type="lr"):
         """
         Artifacts are filed per scene in the shared model store — `model/rank/{scene}/lr.pth` and
         `model/feature/{scene}/lr.features.json` — so a trained model survives across runs and does
@@ -154,6 +167,8 @@ class LRRecModel(RecModel):
         if feature_space is None and Path(self.feature_file).exists():
             # reuse the persisted vocabulary rather than re-fitting encoders over the whole frame
             feature_space = FeatureSpace.load(self.feature_file)
+        if feature_space is None:
+            feature_space = FeatureSpace.for_model(model_type)
 
         self.dataset = EventDataSet(user_feature=user_feature, item_feature=item_feature,
                                     events=events, feature_space=feature_space)
@@ -238,6 +253,7 @@ class LRRecModel(RecModel):
         losser = nn.BCELoss()
         optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         dataloader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=shuffle)
+        best_auc, best_state = None, None
 
         for epoch in range(epoch_num):
             self.model.train()
@@ -261,7 +277,14 @@ class LRRecModel(RecModel):
             auc = self.evaluate(val_set, batch_size=batch_size)
             if auc is not None:
                 message += f", val auc:{auc:.4f}"
+                if best_auc is None or auc > best_auc:
+                    best_auc = auc
+                    best_state = {name: value.detach().clone()
+                                  for name, value in self.model.state_dict().items()}
             print(message)
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
+            print(f"restored best validation checkpoint (auc:{best_auc:.4f})")
 
     def _split(self, val_ratio=0.2, seed=42):
         total = len(self.dataset)

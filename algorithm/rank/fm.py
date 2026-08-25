@@ -45,7 +45,7 @@ class FMRecModel(LRRecModel):
         feature_file = feature_file or feature_path(scene) / FEATURE_FILENAME
         super().__init__(user_feature=user_feature, item_feature=item_feature, events=events,
                          feature_space=feature_space, scene=scene, model_file=model_file,
-                         feature_file=feature_file)
+                         feature_file=feature_file, model_type="fm")
         self.model = FMModel(dim=self.dataset.feature_dim, factor_dim=factor_dim)
 
     def load(self):

@@ -25,6 +25,7 @@ import re
 import numpy as np
 import pandas as pd
 from algorithm.feature.event_feature import event_feature_columns
+from algorithm.feature.feature_catalog import ModelFeatureSet
 
 # column kinds
 ID = "id"        # one-hot over the categories seen at fit time
@@ -45,7 +46,9 @@ def _str_series(frame, name):
     """Missing column -> empty strings, so a frame short one field degrades instead of raising."""
     if name not in frame.columns:
         return pd.Series([""] * len(frame), index=frame.index, dtype=object)
-    return frame[name].fillna("").astype(str)
+    return frame[name].map(
+        lambda value: ",".join(str(item) for item in value)
+        if isinstance(value, (list, tuple, set)) else value).fillna("").astype(str)
 
 
 def _num_series(frame, name):
@@ -70,10 +73,11 @@ def _bool_series(frame, name):
 class ColumnSpec(object):
     """One input column plus whatever was learned about it at fit time."""
 
-    def __init__(self, name="", kind=ID, sep=DEFAULT_MULTI_SEP):
+    def __init__(self, name="", kind=ID, sep=DEFAULT_MULTI_SEP, feature_id=None):
         self.name = name
         self.kind = kind
         self.sep = sep
+        self.feature_id = feature_id
         self.categories = []  # ID / MULTI vocabulary, sorted so the column order is deterministic
         self.mean = 0.0       # NUM
         self.scale = 1.0      # NUM
@@ -107,7 +111,11 @@ class ColumnSpec(object):
         rows = len(frame)
         if self.kind == NUM:
             values = _num_series(frame, self.name).fillna(self.mean)
-            return ((values.values - self.mean) / self.scale).reshape(rows, 1)
+            # Streaming entities can be far more active than the training population. Bound
+            # standardized values to avoid uncontrolled FM quadratic extrapolation while keeping
+            # ordinary observations unchanged.
+            normalized = np.clip((values.values - self.mean) / self.scale, -3.0, 3.0)
+            return normalized.reshape(rows, 1)
         if self.kind == BOOL:
             return np.asarray(_bool_series(frame, self.name)).reshape(rows, 1)
 
@@ -131,7 +139,7 @@ class ColumnSpec(object):
         return out
 
     def to_dict(self):
-        return {
+        payload = {
             "name": self.name,
             "kind": self.kind,
             "sep": self.sep,
@@ -139,10 +147,15 @@ class ColumnSpec(object):
             "mean": self.mean,
             "scale": self.scale,
         }
+        if self.feature_id:
+            payload["feature"] = self.feature_id
+        return payload
 
     @classmethod
     def from_dict(cls, payload):
-        spec = cls(name=payload["name"], kind=payload["kind"], sep=payload.get("sep", DEFAULT_MULTI_SEP))
+        spec = cls(name=payload["name"], kind=payload["kind"],
+                   sep=payload.get("sep", DEFAULT_MULTI_SEP),
+                   feature_id=payload.get("feature"))
         spec.categories = list(payload.get("categories", []))
         spec.mean = float(payload.get("mean", 0.0))
         spec.scale = float(payload.get("scale", 1.0)) or 1.0
@@ -174,10 +187,29 @@ def _default_item_columns():
 
 class FeatureSpace(object):
 
-    def __init__(self, user_columns=None, item_columns=None):
+    def __init__(self, user_columns=None, item_columns=None, catalog_version=None,
+                 feature_set=None, model_type=None):
         self.user_columns = user_columns if user_columns is not None else _default_user_columns()
         self.item_columns = item_columns if item_columns is not None else _default_item_columns()
+        self.catalog_version = catalog_version
+        self.feature_set = feature_set
+        self.model_type = model_type
         self.fitted = False
+
+    @classmethod
+    def for_model(cls, model_type):
+        """Build an unfitted space from the model's catalog-backed feature-set declaration."""
+        selected = ModelFeatureSet.for_model(model_type)
+
+        def columns(items):
+            return [ColumnSpec(name=definition["column"], kind=definition["kind"],
+                               sep=definition.get("sep", DEFAULT_MULTI_SEP),
+                               feature_id=feature_id)
+                    for feature_id, definition in items]
+
+        return cls(user_columns=columns(selected.user), item_columns=columns(selected.item),
+                   catalog_version=selected.catalog_version, feature_set=selected.name,
+                   model_type=selected.model_type)
 
     @property
     def user_width(self):
@@ -227,11 +259,21 @@ class FeatureSpace(object):
         return {raw_id: encoded[i] for i, raw_id in enumerate(frame["id"])}
 
     def to_dict(self):
-        return {
+        payload = {
             "version": SCHEMA_VERSION,
             "user": [column.to_dict() for column in self.user_columns],
             "item": [column.to_dict() for column in self.item_columns],
+            "user_width": self.user_width,
+            "item_width": self.item_width,
+            "input_dim": self.dim,
         }
+        if self.catalog_version is not None:
+            payload["catalog_version"] = self.catalog_version
+        if self.feature_set:
+            payload["feature_set"] = self.feature_set
+        if self.model_type:
+            payload["model_type"] = self.model_type
+        return payload
 
     @classmethod
     def from_dict(cls, payload):
@@ -241,8 +283,16 @@ class FeatureSpace(object):
         space = cls(
             user_columns=[ColumnSpec.from_dict(item) for item in payload["user"]],
             item_columns=[ColumnSpec.from_dict(item) for item in payload["item"]],
+            catalog_version=payload.get("catalog_version"),
+            feature_set=payload.get("feature_set"),
+            model_type=payload.get("model_type"),
         )
         space.fitted = True
+        for key, actual in (("user_width", space.user_width), ("item_width", space.item_width),
+                            ("input_dim", space.dim)):
+            expected = payload.get(key)
+            if expected is not None and int(expected) != actual:
+                raise ValueError("feature space %s=%s, computed %s" % (key, expected, actual))
         return space
 
     def save(self, path):

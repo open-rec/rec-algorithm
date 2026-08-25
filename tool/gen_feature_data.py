@@ -18,6 +18,10 @@ def materialize(user_file, item_file, event_file, output_dir, as_of_time=None,
     output.mkdir(parents=True, exist_ok=True)
     user_features = enrich_entity_features(users, events, "user", as_of_time)
     item_features = enrich_entity_features(items, events, "item", as_of_time)
+    cutoff = int(as_of_time if as_of_time is not None else
+                 pd.to_numeric(events.get("time"), errors="coerce").max())
+    user_features.insert(1, "as_of_time", cutoff)
+    item_features.insert(1, "as_of_time", cutoff)
     user_features.to_csv(str(output / "user_feature.csv"), index=False)
     item_features.to_csv(str(output / "item_feature.csv"), index=False)
     if feature_space_file:

@@ -1,8 +1,13 @@
-import csv
+"""Generate every deployable recall table from OpenRec raw item/event CSVs."""
 
+import argparse
+import csv
+import hashlib
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 
-from algorithm.recall.embedding import EventEmbedding
 from algorithm.recall.hot import Hot
 from algorithm.recall.i2i import ItemBasedI2I
 from algorithm.recall.new import New
@@ -23,14 +28,25 @@ def gen_i2i_data(items, events, i2i_size, filename):
 
 
 def gen_embedding_data(items, events, embedding_dim, filename):
+    popularity = events.groupby(['scene', 'item_id']).size()
     with open(filename, 'w') as f:
         writer = csv.writer(f)
         writer.writerow(['scene', 'item', 'vector'])
-        for scene, scene_events in events.groupby('scene'):
-            scene_embedding = EventEmbedding(events=scene_events)
-            item_vectors = scene_embedding.dump_vectors(embedding_dim)
-            for item, vector in item_vectors:
-                writer.writerow([scene, item, vector])
+        for row in items.itertuples(index=False):
+            # Stable semantic hashing keeps same-category/tag items close without requiring a
+            # heavyweight Word2Vec dependency during bootstrap generation.
+            vector = np.zeros(embedding_dim, dtype=float)
+            tokens = [str(getattr(row, 'category', ''))]
+            tokens.extend(str(getattr(row, 'tags', '')).replace('/', ',').split(','))
+            for token in filter(None, tokens):
+                digest = hashlib.sha256(token.encode()).digest()
+                for index in range(embedding_dim):
+                    vector[index] += (digest[index] / 127.5) - 1.0
+            vector[0] += np.log1p(popularity.get((row.scene, row.id), 0))
+            norm = np.linalg.norm(vector)
+            if norm:
+                vector /= norm
+            writer.writerow([row.scene, row.id, vector.tolist()])
 
 
 def gen_hot_data(events, hot_size, filename):
@@ -55,19 +71,29 @@ def gen_new_data(items, new_size, filename):
                 writer.writerow([scene, score_item.item, score_item.score])
 
 
-def gen_scene_recall(scene='test'):
-    users = pd.read_csv('../data/%s/user.csv' % scene, header=0)
-    items = pd.read_csv('../data/%s/item.csv' % scene, header=0)
-    events = pd.read_csv('../data/%s/event.csv' % scene, header=0)
-
-    events = events[events['type'] == 'click']
-
-    gen_i2i_data(items, events, 20, '../data/%s/recall/i2i.csv' % scene)
-    #gen_embedding_data(items, events, 10, '../data/%s/recall/embedding.csv' % scene)
-    #gen_hot_data(events, 2000, '../data/%s/recall/hot.csv' % scene)
-    #gen_new_data(items, 2000, '../data/%s/recall/new.csv' % scene)
+def generate(item_file, event_file, output_dir, i2i_size=20, recall_size=2000,
+             embedding_dim=10):
+    items = pd.read_csv(item_file, header=0)
+    events = pd.read_csv(event_file, header=0)
+    positive = events[events['type'].isin(['click', 'collect', 'buy'])].copy()
+    if positive.empty:
+        raise ValueError("recall generation requires click, collect, or buy events")
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    gen_i2i_data(items, positive, i2i_size, str(output / 'i2i.csv'))
+    gen_embedding_data(items, positive, embedding_dim, str(output / 'embedding.csv'))
+    gen_hot_data(positive, recall_size, str(output / 'hot.csv'))
+    gen_new_data(items, recall_size, str(output / 'new.csv'))
 
 
 if __name__ == "__main__":
-    #gen_scene_recall('test')
-    gen_scene_recall('douban')
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--item', required=True)
+    parser.add_argument('--event', required=True)
+    parser.add_argument('--output', required=True)
+    parser.add_argument('--i2i-size', type=int, default=20)
+    parser.add_argument('--recall-size', type=int, default=2000)
+    parser.add_argument('--embedding-dim', type=int, default=10)
+    args = parser.parse_args()
+    generate(args.item, args.event, args.output, args.i2i_size, args.recall_size,
+             args.embedding_dim)
