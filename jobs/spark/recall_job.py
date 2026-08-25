@@ -7,13 +7,20 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 from jobs.spark.io import keep_active_item_events, read_events, read_items, write_result
-from jobs.spark.recall import embedding, hot, i2i, new
+from jobs.spark.recall import content_i2i, hot, item_cf_i2i, item_seq_emb, new, user_cf_u2i
 from publisher.spark import publish_embedding, publish_recall
+
+
+SERVING_TABLES = {
+    "hot": "hot", "new": "new", "item_cf_i2i": "item-cf-i2i",
+    "content_i2i": "content-i2i", "user_cf_u2i": "user-cf-u2i",
+}
 
 
 def parser():
     result = argparse.ArgumentParser(description="OpenRec distributed recall job")
-    result.add_argument("algorithm", choices=("hot", "new", "i2i", "embedding"))
+    result.add_argument("algorithm", choices=("hot", "new", "item_cf_i2i", "item_seq_emb",
+                                               "user_cf_u2i", "content_i2i"))
     result.add_argument("--event-table", default="openrec.event_entity")
     result.add_argument("--item-table", default="openrec.item_entity")
     result.add_argument("--event-path")
@@ -27,6 +34,7 @@ def parser():
     result.add_argument("--event-type", default="click")
     result.add_argument("--vector-size", type=int, default=10)
     result.add_argument("--min-count", type=int, default=5)
+    result.add_argument("--neighbour-size", type=int, default=50)
     result.add_argument("--publish", action="store_true")
     result.add_argument("--redis-host", default="redis")
     result.add_argument("--redis-port", type=int, default=6379)
@@ -51,29 +59,33 @@ def run(args, spark=None):
                        path=args.item_path)
     if args.algorithm == "new":
         output = new(items, args.size)
+    elif args.algorithm == "content_i2i":
+        output = content_i2i(items, args.size)
     else:
         events = read_events(spark, args.event_table, args.date, cumulative=True,
                              path=args.event_path)
         events = keep_active_item_events(events, items)
         if args.algorithm == "hot":
             output = hot(events, args.size, args.event_type)
-        elif args.algorithm == "i2i":
-            output = i2i(events, args.size, args.event_type)
+        elif args.algorithm == "item_cf_i2i":
+            output = item_cf_i2i(events, args.size, args.event_type)
+        elif args.algorithm == "user_cf_u2i":
+            output = user_cf_u2i(events, args.size, args.neighbour_size, args.event_type)
         else:
-            output = embedding(events, args.vector_size, args.min_count,
-                               event_type=args.event_type)
+            output = item_seq_emb(events, args.vector_size, args.min_count,
+                                  event_type=args.event_type)
     output = output.withColumn("dt", F.lit(args.date))
     if args.output_table or args.output_path:
         write_result(output, args.output_table, args.output_path, args.mode)
     if args.publish:
-        if args.algorithm == "embedding":
+        if args.algorithm == "item_seq_emb":
             publish_embedding(output, [args.es_host], args.es_user, args.es_password,
                               ca_certs=args.es_ca_certs,
                               verify_certs=bool(args.es_ca_certs),
                               business_date=args.date, revision=args.revision,
                               max_index_versions=args.max_index_versions)
         else:
-            publish_recall(output, args.algorithm, args.date, args.revision,
+            publish_recall(output, SERVING_TABLES[args.algorithm], args.date, args.revision,
                            [args.es_host], args.es_user, args.es_password,
                            ca_certs=args.es_ca_certs,
                            verify_certs=bool(args.es_ca_certs),

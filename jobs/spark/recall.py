@@ -40,7 +40,7 @@ def new(items, size=1000, power=31):
                 F.col("pub_time").cast("long").alias("publish_time"))
 
 
-def i2i(events, cut_size=20, event_type="click"):
+def item_cf_i2i(events, cut_size=20, event_type="click"):
     frame = _events(events, event_type).filter(F.col("user_id").isNotNull())
     sequences = frame.groupBy("scene", "user_id").agg(
         F.sort_array(F.collect_list(F.struct("time", "item_id"))).alias("events")) \
@@ -63,8 +63,90 @@ def i2i(events, cut_size=20, event_type="click"):
         .select("scene", "left_item", "right_item", "score")
 
 
-def embedding(events, vector_size=10, min_count=5, window_size=5, max_iter=3,
-              event_type="click"):
+def user_cf_u2i(events, size=1000, neighbour_size=50, event_type="click"):
+    """UserCF candidates with inverse-popularity weighted cosine user similarity."""
+    frame = _events(events, event_type).filter(
+        F.col("user_id").isNotNull() & F.col("item_id").isNotNull()) \
+        .select("scene", "user_id", "item_id").dropDuplicates()
+    item_users = frame.groupBy("scene", "item_id").agg(
+        F.collect_set("user_id").alias("users")) \
+        .withColumn("weight", 1.0 / F.log(F.size("users") + F.lit(1.0)))
+    pairs = item_users.select("scene", "weight", F.explode("users").alias("user"), "users") \
+        .select("scene", "weight", "user", F.explode("users").alias("neighbour")) \
+        .filter(F.col("user") != F.col("neighbour")) \
+        .groupBy("scene", "user", "neighbour").agg(F.sum("weight").alias("cooccurrence"))
+    counts = frame.groupBy("scene", "user_id").count()
+    left = counts.select("scene", F.col("user_id").alias("user"),
+                         F.col("count").alias("user_count"))
+    right = counts.select("scene", F.col("user_id").alias("neighbour"),
+                          F.col("count").alias("neighbour_count"))
+    scored = pairs.join(left, ["scene", "user"]).join(right, ["scene", "neighbour"]) \
+        .withColumn("similarity", F.col("cooccurrence") /
+                    F.sqrt(F.col("user_count") * F.col("neighbour_count")))
+    neighbour_rank = Window.partitionBy("scene", "user").orderBy(
+        F.desc("similarity"), F.asc("neighbour"))
+    neighbours = scored.withColumn("rank", F.row_number().over(neighbour_rank)) \
+        .filter(F.col("rank") <= neighbour_size)
+    neighbour_items = frame.select("scene", F.col("user_id").alias("neighbour"),
+                                   F.col("item_id").alias("item"))
+    seen = frame.select("scene", F.col("user_id").alias("user"),
+                        F.col("item_id").alias("item")).withColumn("seen", F.lit(1))
+    candidates = neighbours.join(neighbour_items, ["scene", "neighbour"]) \
+        .join(seen, ["scene", "user", "item"], "left_anti") \
+        .groupBy("scene", "user", "item").agg(F.sum("similarity").alias("score"))
+    candidate_rank = Window.partitionBy("scene", "user").orderBy(F.desc("score"), F.asc("item"))
+    return candidates.withColumn("rank", F.row_number().over(candidate_rank)) \
+        .filter(F.col("rank") <= size).select("scene", "user", "item", "score")
+
+
+def content_i2i(items, cut_size=20, content_columns=("category", "tags", "title")):
+    """TF-IDF cosine item similarity using category, tags and whitespace-delimited title terms."""
+    available = [column for column in content_columns if column in items.columns]
+    frame = items.filter(F.col("scene").isNotNull() & F.col("id").isNotNull()) \
+        .dropDuplicates(["scene", "id"])
+    def prefixed_tokens(column):
+        values = F.split(F.lower(F.coalesce(F.col(column).cast("string"), F.lit(""))),
+                         r"[,/|\s]+")
+        prefix = column + ":"
+        return F.transform(values, lambda token: F.concat(F.lit(prefix), token))
+
+    token_arrays = [prefixed_tokens(column) for column in available]
+    if not token_arrays:
+        return items.sparkSession.createDataFrame(
+            [], "scene string, left_item string, right_item string, score double")
+    tokens = frame.select("scene", F.col("id").alias("item"),
+                          F.array_distinct(F.flatten(F.array(*token_arrays))).alias("tokens")) \
+        .select("scene", "item", F.explode("tokens").alias("token")) \
+        .filter(~F.col("token").rlike(":$"))
+    document_counts = tokens.select("scene", "item").distinct().groupBy("scene").count() \
+        .withColumnRenamed("count", "document_count")
+    frequencies = tokens.groupBy("scene", "token").count().withColumnRenamed("count", "df")
+    weighted = tokens.join(document_counts, "scene").join(frequencies, ["scene", "token"]) \
+        .withColumn("weight", F.log((F.col("document_count") + 1.0) /
+                                    (F.col("df") + 1.0)) + 1.0)
+    norms = weighted.groupBy("scene", "item").agg(
+        F.sqrt(F.sum(F.col("weight") * F.col("weight"))).alias("norm"))
+    left = weighted.select("scene", "token", F.col("item").alias("left_item"),
+                           F.col("weight").alias("left_weight"))
+    right = weighted.select("scene", "token", F.col("item").alias("right_item"),
+                            F.col("weight").alias("right_weight"))
+    dots = left.join(right, ["scene", "token"]).filter(F.col("left_item") != F.col("right_item")) \
+        .groupBy("scene", "left_item", "right_item").agg(
+            F.sum(F.col("left_weight") * F.col("right_weight")).alias("dot"))
+    left_norm = norms.select("scene", F.col("item").alias("left_item"),
+                             F.col("norm").alias("left_norm"))
+    right_norm = norms.select("scene", F.col("item").alias("right_item"),
+                              F.col("norm").alias("right_norm"))
+    scored = dots.join(left_norm, ["scene", "left_item"]) \
+        .join(right_norm, ["scene", "right_item"]) \
+        .withColumn("score", F.col("dot") / (F.col("left_norm") * F.col("right_norm")))
+    ranked = Window.partitionBy("scene", "left_item").orderBy(F.desc("score"), F.asc("right_item"))
+    return scored.withColumn("rank", F.row_number().over(ranked)).filter(F.col("rank") <= cut_size) \
+        .select("scene", "left_item", "right_item", "score")
+
+
+def item_seq_emb(events, vector_size=10, min_count=5, window_size=5, max_iter=3,
+                 event_type="click"):
     """Train one distributed Word2Vec model per scene; scene cardinality should stay bounded."""
     frame = _events(events, event_type).filter(F.col("user_id").isNotNull())
     scenes = [row.scene for row in frame.select("scene").distinct().collect()]

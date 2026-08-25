@@ -8,9 +8,11 @@ import pandas as pd
 from pyspark.sql import SparkSession, functions as F
 
 from algorithm.recall.hot import Hot
-from algorithm.recall.i2i import ItemBasedI2I
+from algorithm.recall.content_i2i import ContentBasedI2I
+from algorithm.recall.item_cf_i2i import ItemBasedI2I
 from algorithm.recall.new import New
-from jobs.spark.recall import embedding, hot, i2i, new
+from algorithm.recall.user_cf_u2i import UserBasedCF
+from jobs.spark.recall import content_i2i, hot, item_cf_i2i, item_seq_emb, new, user_cf_u2i
 from jobs.spark.io import keep_active_item_events, read_events, read_items, write_result
 
 
@@ -37,10 +39,16 @@ def main():
     assert actual_hot == expected_hot, (actual_hot, expected_hot)
     expected_i2i = ItemBasedI2I(source).dump_i2i(10)
     actual_i2i = {(row.left_item, row.right_item): row.score
-                  for row in i2i(distributed_source, 10).collect()}
+                  for row in item_cf_i2i(distributed_source, 10).collect()}
     for left, neighbours in expected_i2i.items():
         for right, score in neighbours:
             assert math.isclose(actual_i2i[(left, right)], score, rel_tol=1e-12)
+    expected_user_cf = UserBasedCF(source, 10).dump_user_recall()
+    actual_user_cf = {(row.user, row.item): row.score
+                      for row in user_cf_u2i(distributed_source, 10).collect()}
+    for user, candidates in expected_user_cf.items():
+        for item, score in candidates:
+            assert math.isclose(actual_user_cf[(user, item)], score, rel_tol=1e-12)
     item_rows = [("a", "home", 10), ("b", "home", 20), ("c", "home", 15)]
     item_columns = ["id", "scene", "pub_time"]
     local_items = pd.DataFrame(item_rows, columns=item_columns)
@@ -48,7 +56,20 @@ def main():
     actual_new = {row.item: row.score
                   for row in new(spark.createDataFrame(item_rows, item_columns), 10).collect()}
     assert actual_new == expected_new, (actual_new, expected_new)
-    vectors = embedding(distributed_source, vector_size=4, min_count=1, max_iter=1).collect()
+    content_rows = [
+        ("a", "home", "movie/action", "hero,space", "space hero"),
+        ("b", "home", "movie/action", "hero", "another hero"),
+        ("c", "home", "book/history", "ancient", "old world"),
+    ]
+    content_columns = ["id", "scene", "category", "tags", "title"]
+    local_content = ContentBasedI2I(pd.DataFrame(content_rows, columns=content_columns)).dump_i2i(10)
+    actual_content = {(row.left_item, row.right_item): row.score
+                      for row in content_i2i(spark.createDataFrame(content_rows, content_columns), 10)
+                      .collect()}
+    for left, neighbours in local_content.items():
+        for right, score in neighbours:
+            assert math.isclose(actual_content[(left, right)], score, rel_tol=1e-12)
+    vectors = item_seq_emb(distributed_source, vector_size=4, min_count=1, max_iter=1).collect()
     assert vectors and all(len(row.vector) == 4 and row.scene == "home" for row in vectors)
     root = tempfile.mkdtemp(prefix="openrec-hive-day-")
     source_path = root + "/event"

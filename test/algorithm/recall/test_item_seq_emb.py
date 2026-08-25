@@ -1,6 +1,6 @@
 import pandas as pd
 
-from algorithm.recall.embedding import EventEmbedding
+from algorithm.recall.item_seq_emb import EventEmbedding
 
 
 def test_recall():

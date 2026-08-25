@@ -41,9 +41,12 @@ def publish_recall(frame, kind, business_date, revision="r001", hosts=None, user
         def actions():
             for row in rows:
                 source = {"scene": row.scene, "score": float(row.score)}
-                if kind == "i2i":
+                if kind in ("item-cf-i2i", "content-i2i"):
                     source.update(left_item=row.left_item, right_item=row.right_item)
                     doc_id = "%s:%s:%s" % (row.scene, row.left_item, row.right_item)
+                elif kind == "user-cf-u2i":
+                    source.update(user=row.user, item=row.item)
+                    doc_id = "%s:%s:%s" % (row.scene, row.user, row.item)
                 else:
                     source["item"] = row.item
                     doc_id = "%s:%s" % (row.scene, row.item)
@@ -65,9 +68,9 @@ def publish_recall(frame, kind, business_date, revision="r001", hosts=None, user
 
 
 def publish_redis(frame, kind, host="redis", port=6379, password=None):
-    if kind not in ("hot", "new", "i2i"):
-        raise ValueError("Redis publisher supports hot, new and i2i")
-    key_columns = ["scene", "left_item"] if kind == "i2i" else ["scene"]
+    if kind not in ("hot", "new", "item_cf_i2i"):
+        raise ValueError("Redis publisher supports hot, new and item_cf_i2i")
+    key_columns = ["scene", "left_item"] if kind == "item_cf_i2i" else ["scene"]
     partitioned = frame.repartition(*key_columns)
 
     def write(rows):
@@ -75,8 +78,8 @@ def publish_redis(frame, kind, host="redis", port=6379, password=None):
         client = redis.Redis(host=host, port=port, password=password, decode_responses=True)
         grouped = {}
         for row in rows:
-            if kind == "i2i":
-                key = "i2i:{%s}:%s" % (row.left_item, row.scene)
+            if kind == "item_cf_i2i":
+                key = "item-cf-i2i:{%s}:%s" % (row.left_item, row.scene)
                 member = row.right_item
             else:
                 key = "%s:{%s}" % (kind, row.scene)

@@ -33,8 +33,8 @@ def test_publisher_refuses_empty_release_before_calling_console():
     frame.count.return_value = 0
     with patch("publisher.spark._console_request") as request:
         try:
-            publish_recall(frame, "i2i", "2026-08-20")
+            publish_recall(frame, "item-cf-i2i", "2026-08-20")
             raise AssertionError("expected empty release to fail")
         except ValueError as error:
-            assert "empty i2i" in str(error)
+            assert "empty item-cf-i2i" in str(error)
     request.assert_not_called()

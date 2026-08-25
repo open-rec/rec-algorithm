@@ -6,13 +6,14 @@ import json
 from pathlib import Path
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 2
+BUILD_VERSION = 4
 REQUIRED = (
     "feature/default/user_feature.csv", "feature/default/item_feature.csv",
     "feature/default/lr.features.json", "feature/default/fm.features.json",
     "rank/default/lr.pth", "rank/default/fm.pth",
     "rank/default/lr.manifest.json", "rank/default/fm.manifest.json",
-    "recall/i2i.csv", "recall/hot.csv", "recall/new.csv", "recall/embedding.csv",
+    "recall/item_cf_i2i.csv", "recall/content_i2i.csv", "recall/user_cf_u2i.csv",
+    "recall/hot.csv", "recall/new.csv", "recall/item_seq_emb.csv",
 )
 
 

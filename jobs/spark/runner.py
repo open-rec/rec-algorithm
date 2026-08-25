@@ -8,7 +8,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-ALGORITHMS = ("hot", "new", "i2i", "embedding")
+ALGORITHMS = ("hot", "new", "item_cf_i2i", "item_seq_emb", "user_cf_u2i", "content_i2i")
+PUBLISHABLE_ALGORITHMS = ALGORITHMS
 JOB_LOCK = threading.Lock()
 
 
@@ -17,7 +18,8 @@ def recall_command(payload):
     business_date = payload.get("date")
     revision = payload.get("revision", "r001")
     if algorithm not in ALGORITHMS:
-        raise ValueError("algorithm must be hot, new, i2i or embedding")
+        raise ValueError("algorithm must be hot, new, item_cf_i2i, content_i2i, "
+                         "user_cf_u2i or item_seq_emb")
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
         raise ValueError("date must use YYYY-MM-DD")
     if not re.match(r"^r\d{3,}$", revision):
@@ -40,20 +42,23 @@ def recall_command(payload):
             "OPENREC_ITEM_PATH", "hdfs://namenode:8020/openrec/hive/item"),
         "--output-path", os.environ.get(
             "OPENREC_RECALL_PATH", "hdfs://namenode:8020/openrec/hive/recall") + "/" + algorithm,
-        "--publish",
         "--es-host", "https://elasticsearch:9200",
         "--es-user", "elastic",
         "--es-password", os.environ.get("ELASTIC_PASSWORD", "openrec-es-password"),
         "--console-url", os.environ.get("REC_CONSOLE_URL", "http://rec-console:8095"),
         "--max-index-versions", str(payload.get("max_index_versions", 2)),
     ]
-    if algorithm == "embedding":
+    if algorithm in PUBLISHABLE_ALGORITHMS:
+        command.append("--publish")
+    if algorithm == "item_seq_emb":
         command.extend(["--vector-size", str(payload.get("vector_size", 10)),
                         "--min-count", str(payload.get("min_count", 1))])
-    if algorithm == "i2i":
+    if algorithm in ("item_cf_i2i", "content_i2i"):
         command.extend(["--size", str(payload.get("size", 20))])
     else:
         command.extend(["--size", str(payload.get("size", 1000))])
+    if algorithm == "user_cf_u2i":
+        command.extend(["--neighbour-size", str(payload.get("neighbour_size", 50))])
     return command
 
 

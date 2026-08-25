@@ -6,7 +6,7 @@ from jobs.spark.runner import analytics_command, rank_command, recall_command
 def test_runner_builds_versioned_es_publish_command(monkeypatch):
     monkeypatch.setenv("ELASTIC_PASSWORD", "secret")
     command = recall_command({
-        "algorithm": "i2i",
+        "algorithm": "item_cf_i2i",
         "date": "2026-08-19",
         "revision": "r002",
         "max_index_versions": 2,
@@ -21,7 +21,15 @@ def test_runner_builds_versioned_es_publish_command(monkeypatch):
     assert command[command.index("--console-url") + 1] == "http://rec-console:8095"
     assert command[command.index("--event-path") + 1].endswith("/openrec/hive/event")
     assert command[command.index("--item-path") + 1].endswith("/openrec/hive/item")
-    assert command[command.index("--output-path") + 1].endswith("/openrec/hive/recall/i2i")
+    assert command[command.index("--output-path") + 1].endswith("/openrec/hive/recall/item_cf_i2i")
+    assert "--publish" in command
+
+
+@pytest.mark.parametrize("algorithm", ["user_cf_u2i", "content_i2i"])
+def test_runner_builds_publishable_complementary_recall_jobs(algorithm):
+    command = recall_command({"algorithm": algorithm, "date": "2026-08-19"})
+
+    assert command[command.index("--output-path") + 1].endswith("/recall/" + algorithm)
     assert "--publish" in command
 
 

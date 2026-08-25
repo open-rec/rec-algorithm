@@ -44,7 +44,7 @@ bash package.sh                              # -> dist/rec_algorithm-0.0.1-*.whl
 
 | Path | Contents |
 |---|---|
-| `algorithm/recall/` | `i2i`, `hot`, `new`, `embedding` — all subclass `Recall` |
+| `algorithm/recall/` | `item_cf_i2i`, `user_cf_u2i`, `content_i2i`, `hot`, `new`, `item_seq_emb` strategies — all subclass `Recall` |
 | `algorithm/rank/` | `LRModel` / `LRRecModel`, subclassing `RecModel` |
 | `algorithm/feature/` | feature encoders for users and items |
 | `algorithm/meta/` | table and column definitions — the source of truth for CSV headers |
@@ -64,7 +64,7 @@ scoring rules, writes versionable Parquet/Hive results, and can publish them to 
 
 ```text
 data-processor -> Hive ODS/DWD -> jobs.spark -> Hive/Parquet artifacts
-                                            -> versioned Elasticsearch hot/new/i2i
+                                            -> versioned Elasticsearch recall tables
                                             -> Elasticsearch embeddings
 ```
 
@@ -79,15 +79,15 @@ spark-submit --master spark://spark-master:7077 \
 
 spark-submit --master spark://spark-master:7077 \
   --py-files dist/rec_algorithm-0.0.1-py3-none-any.whl \
-  jobs/spark/recall_job.py i2i \
+  jobs/spark/recall_job.py item_cf_i2i \
   --event-table openrec.event_entity \
-  --date 2026-08-18 --output-table openrec.recall_i2i --size 20 --publish
+  --date 2026-08-18 --output-table openrec.recall_item_cf_i2i --size 20 --publish
 
 spark-submit --master spark://spark-master:7077 \
   --py-files dist/rec_algorithm-0.0.1-py3-none-any.whl \
-  jobs/spark/recall_job.py embedding \
+  jobs/spark/recall_job.py item_seq_emb \
   --event-table openrec.event_entity \
-  --date 2026-08-18 --output-table openrec.recall_embedding --vector-size 64 --publish \
+  --date 2026-08-18 --output-table openrec.recall_item_seq_emb --vector-size 64 --publish \
   --es-password "$ELASTIC_PASSWORD" --es-ca-certs /path/to/ca.crt
 ```
 
@@ -95,8 +95,10 @@ Use `new` with `--item-table openrec.item_entity`. Output schemas are stable:
 
 - hot/new: `scene, item, score`
 - new additionally carries `publish_time` for the online time-window filter
-- i2i: `scene, left_item, right_item, score`
-- embedding: `scene, item, vector`
+- item_cf_i2i: `scene, left_item, right_item, score`
+- content_i2i: `scene, left_item, right_item, score`
+- user_cf_u2i: `scene, user, item, score`
+- item_seq_emb: `scene, item, vector`
 
 All source and result tables are partitioned by UTC `dt`. `--date` defaults to yesterday, so a
 daily scheduler can invoke the same command without calculating a date; passing it explicitly is
@@ -104,17 +106,18 @@ recommended for backfills and reproducibility. Source reads use the cumulative w
 through `--date`, not just that day's partition: events are de-duplicated and accumulated, while
 items are collapsed to their latest mutation and latest `DELETE` tombstones are excluded. Every
 recall algorithm then semi-joins its events with this active item snapshot before scoring, so
-deleted items do not consume hot/i2i/embedding resources or get published online.
+deleted items do not consume hot/`item_cf_i2i`/`user_cf_u2i`/`item_seq_emb` resources or get published online.
 In cluster mode the runner reads the daily ODS directories directly with `--event-path` and
 `--item-path`. This preserves Hive-style partition discovery while avoiding the incompatible Hive 4
 metastore API in Spark 3.5. Result data is written beneath `--output-path`, remains partitioned by
 the requested day, and uses dynamic partition overwrite so rerunning one day does not rewrite other
 result partitions. Table-based reads and writes remain available for compatible metastores.
 
-With `--publish`, hot/new/i2i are staged as
-`openrec-recall-{algorithm}-{YYYYMMDD}-{revision}`. `rec-console` creates the staging index before
+With `--publish`, non-vector algorithms are staged under their serving table names:
+`hot`, `new`, `item-cf-i2i`, `content-i2i`, and `user-cf-u2i`. Physical indexes use
+`openrec-recall-{tableName}-{YYYYMMDD}-{revision}`. `rec-console` creates the staging index before
 Spark writes it, then verifies the document count, atomically moves
-`openrec-recall-{algorithm}-active`, and removes versions beyond the configured retention after the
+`openrec-recall-{tableName}-active`, and removes versions beyond the configured retention after the
 switch succeeds. The active version plus one previous physical index are retained by default. Use
 `--revision r002` for a rerun that must coexist with r001, and `--max-index-versions` to change the
 maximum number of loaded physical indexes. Scene remains a document field and query condition; it
@@ -137,7 +140,7 @@ Each submitted runner job is capped at four Spark cores by default; set `RECALL_
 different deployment policy. Worker capacity itself is not artificially capped.
 
 Emergency rollback does not rerun Spark or reload documents. POST
-`{"algorithm":"i2i","target_index":"openrec-recall-i2i-20260819-r001"}` to the
+`{"algorithm":"item-cf-i2i","target_index":"openrec-recall-item-cf-i2i-20260819-r001"}` to the
 internal `rec-console` endpoint `/api/recall/releases/rollback`; it atomically moves only the
 active alias. When the target is omitted, the newest retained non-active index is selected.
 The same operation is exposed in the Airflow UI as the manual
@@ -179,26 +182,31 @@ manifest. `tool/gen_recall_data.py` remains available as a standalone CLI when o
 
 ## recall
 
-Every algorithm implements `recall(user_triggers, item_triggers)`; the i2i and embedding ones also
+Every algorithm implements `recall(user_triggers, item_triggers)`; `item_cf_i2i` and `item_seq_emb` also
 implement a `dump_*` method used to write the offline tables.
 
 | Algorithm | Class | Method |
 |---|---|---|
-| i2i | `ItemBasedI2I` | item co-occurrence within a user's sequence, damped by `1/log(len+1)`, normalized by `sqrt(count_i * count_j)` |
-| embedding | `EventEmbedding` | word2vec (gensim) over per-user item sequences; `dump_vectors` exports 10-dim vectors |
+| item_cf_i2i | `ItemBasedI2I` | item co-occurrence within a user's sequence, damped by `1/log(len+1)`, normalized by `sqrt(count_i * count_j)` |
+| user_cf | `UserBasedCF` | inverse-popularity weighted user similarity, followed by unseen-item aggregation from the top similar users |
+| content | `ContentBasedI2I` | TF-IDF cosine similarity over field-prefixed category, tags and title tokens |
+| item_seq_emb | `EventEmbedding` | word2vec (gensim) over per-user item sequences; `dump_vectors` exports 10-dim vectors |
 | hot | `Hot` | click counts normalized by the maximum |
 | new | `New` | freshness min-max normalized over the observed `pub_time` range, raised to `power` (31) |
 
-`ItemEntityEmbedding` (content-based item embeddings) is not implemented; its methods raise
-`NotImplementedError`.
+`ItemEntityEmbedding` remains reserved for learned dense content vectors. `ContentBasedI2I` is the
+implemented sparse content recall path and requires no model service or external download.
 
 All of them are computed **per scene** — group events by `scene` before constructing them, as
-`gen_recall_data.py` does. i2i and embedding require triggers; hot and new do not.
+`gen_recall_data.py` does. `item_cf_i2i`, `content_i2i`, and `item_seq_emb` require item triggers;
+`user_cf_u2i` requires a user
+trigger; hot and new do not. Spark `user_cf` and `content` write Hive/Parquet results and publish
+their serving tables through the same versioned release protocol as hot and item-CF.
 
 Two behaviours worth knowing:
 
-- **i2i merges across triggers.** An item reachable from several triggers is emitted once, keeping its best score; triggers themselves are never recalled back; the result is truncated to `recall_size`. The similarity matrix is quadratic in sequence length, so it is computed once per instance and reused by `recall()` and `dump_i2i()`.
-- **embedding tolerates unknown triggers.** `min_count=5` keeps rare items out of the word2vec vocabulary, so a trigger may be absent; those are skipped, and a request where none are known returns an empty list rather than raising.
+- **item_cf_i2i merges across triggers.** An item reachable from several triggers is emitted once, keeping its best score; triggers themselves are never recalled back; the result is truncated to `recall_size`. The similarity matrix is quadratic in sequence length, so it is computed once per instance and reused by `recall()` and `dump_i2i()`.
+- **item_seq_emb tolerates unknown triggers.** `min_count=5` keeps rare items out of the word2vec vocabulary, so a trigger may be absent; those are skipped, and a request where none are known returns an empty list rather than raising.
 
 ## rank
 

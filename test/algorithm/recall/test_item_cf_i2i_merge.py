@@ -5,7 +5,7 @@ gen_seq() is the only part that needs pandas, so stubbing it lets the similarity
 merge logic be tested from any directory — unlike the CSV-driven tests next door, which only pass
 when run from their own directory.
 """
-from algorithm.recall.i2i import ItemBasedI2I
+from algorithm.recall.item_cf_i2i import ItemBasedI2I
 
 SEQUENCES = {
     "u1": [("a", 1), ("b", 2), ("c", 3), ("d", 4)],

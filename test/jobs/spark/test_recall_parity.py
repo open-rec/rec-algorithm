@@ -8,8 +8,10 @@ pyspark = pytest.importorskip("pyspark")
 from pyspark.sql import SparkSession
 
 from algorithm.recall.hot import Hot
-from algorithm.recall.i2i import ItemBasedI2I
-from jobs.spark.recall import hot, i2i
+from algorithm.recall.content_i2i import ContentBasedI2I
+from algorithm.recall.item_cf_i2i import ItemBasedI2I
+from algorithm.recall.user_cf_u2i import UserBasedCF
+from jobs.spark.recall import content_i2i, hot, item_cf_i2i, user_cf_u2i
 from jobs.spark.io import read_items, read_users
 from jobs.spark.rank_job import _freeze_feature_history
 
@@ -42,7 +44,31 @@ def test_i2i_matches_local_formula(spark):
     source = events()
     local = ItemBasedI2I(source).dump_i2i(10)
     distributed = {(row.left_item, row.right_item): row.score
-                   for row in i2i(spark.createDataFrame(source), 10).collect()}
+                   for row in item_cf_i2i(spark.createDataFrame(source), 10).collect()}
+    for left, neighbours in local.items():
+        for right, score in neighbours:
+            assert math.isclose(distributed[(left, right)], score, rel_tol=1e-12)
+
+
+def test_user_cf_matches_local_formula(spark):
+    source = events()
+    local = UserBasedCF(source, recall_size=10).dump_user_recall()
+    distributed = {(row.user, row.item): row.score
+                   for row in user_cf_u2i(spark.createDataFrame(source), 10).collect()}
+    for user, candidates in local.items():
+        for item, score in candidates:
+            assert math.isclose(distributed[(user, item)], score, rel_tol=1e-12)
+
+
+def test_content_matches_local_formula(spark):
+    source = pd.DataFrame([
+        ("a", "home", "movie/action", "hero,space", "space hero"),
+        ("b", "home", "movie/action", "hero", "another hero"),
+        ("c", "home", "book/history", "ancient", "old world"),
+    ], columns=["id", "scene", "category", "tags", "title"])
+    local = ContentBasedI2I(source).dump_i2i(10)
+    distributed = {(row.left_item, row.right_item): row.score
+                   for row in content_i2i(spark.createDataFrame(source), 10).collect()}
     for left, neighbours in local.items():
         for right, score in neighbours:
             assert math.isclose(distributed[(left, right)], score, rel_tol=1e-12)

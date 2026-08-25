@@ -1,6 +1,6 @@
 import pandas as pd
 
-from algorithm.recall.i2i import ItemBasedI2I
+from algorithm.recall.item_cf_i2i import ItemBasedI2I
 
 
 def test_item_based_i2i():
