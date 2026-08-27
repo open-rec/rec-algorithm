@@ -16,8 +16,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      OPENREC_TEST_DATA: ${{ github.workspace }}/example-fixture/data/test
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out algorithms
+        uses: actions/checkout@v7
+      - name: Check out deterministic test fixtures
+        uses: actions/checkout@v7
+        with:
+          repository: open-rec/example
+          path: example-fixture
       - name: Set up Python
         uses: actions/setup-python@v6
         with:

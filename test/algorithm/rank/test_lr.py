@@ -3,10 +3,11 @@ import pandas as pd
 from algorithm.feature.item_feature import ItemFeature
 from algorithm.feature.user_feature import UserFeature
 from algorithm.rank.lr import LRRecModel
+from test.support import data_path
 
-items = pd.read_csv('../../../data/test/item.csv', header=0)
-users = pd.read_csv('../../../data/test/user.csv', header=0)
-events = pd.read_csv('../../../data/test/event.csv', header=0)
+items = pd.read_csv(data_path("item.csv"), header=0)
+users = pd.read_csv(data_path("user.csv"), header=0)
+events = pd.read_csv(data_path("event.csv"), header=0)
 
 
 def test_train():

@@ -1,11 +1,12 @@
 import pandas as pd
 
 from algorithm.recall.item_seq_emb import EventEmbedding
+from test.support import data_path
 
 
 def test_recall():
     test_embedding_size = 10
-    events = pd.read_csv('../../../data/test/event.csv', header=0)
+    events = pd.read_csv(data_path("event.csv"), header=0)
     for scene, scene_events in events.groupby('scene'):
         scene_embedding = EventEmbedding(events=scene_events, recall_size=test_embedding_size)
         recall_items = scene_embedding.recall(item_triggers=['item_4081', 'item_7441'])

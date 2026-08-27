@@ -1,12 +1,13 @@
 import pandas as pd
 
 from algorithm.recall.item_cf_i2i import ItemBasedI2I
+from test.support import data_path
 
 
 def test_item_based_i2i():
     test_i2i_size = 10
     test_triggers = ['item_4081', 'item_7441']
-    events = pd.read_csv('../../../data/test/event.csv', header=0)
+    events = pd.read_csv(data_path("event.csv"), header=0)
     for scene, scene_events in events.groupby('scene'):
         scene_i2i = ItemBasedI2I(events=scene_events, recall_size=test_i2i_size)
         recall_items = scene_i2i.recall(item_triggers=test_triggers)
