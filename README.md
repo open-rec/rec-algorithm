@@ -1,5 +1,10 @@
 # rec-algorithm
 
+[![CI](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml/badge.svg)](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.10.0-EE4C2C?logo=pytorch&logoColor=white)
+![Spark](https://img.shields.io/badge/Spark-3.5.3-E25A1C?logo=apachespark&logoColor=white)
+
 The offline side of open-rec: computes the recall tables and trains the rank model that the online
 service serves. It supports both one-machine development (pandas / gensim / torch) and scheduled
 cluster execution (Hive / Spark), with the same recall formulas and serving schemas.
