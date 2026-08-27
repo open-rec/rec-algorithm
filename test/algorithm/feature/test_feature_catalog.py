@@ -87,7 +87,7 @@ def test_serving_lists_match_training_multi_values_and_numeric_outliers_are_boun
     space = FeatureSpace.for_model("fm").fit(users, items)
     training = space.transform_users(users)
     serving = users.copy()
-    serving.at[0, "tags"] = ["sports", "local"]
+    serving["tags"] = pd.Series([["sports", "local"]], dtype=object)
     assert np.array_equal(training, space.transform_users(serving))
 
     outlier = users.copy()

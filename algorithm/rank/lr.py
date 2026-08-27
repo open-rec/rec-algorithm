@@ -63,13 +63,16 @@ class EventDataSet(Dataset):
         # whenever an id repeated, and left id_x/id_y columns behind.
         events = self.raw_events
         # A clicked impression normally has both expose and click events. Its expose is not a
-        # negative label: keep it in behavioural history but remove it from supervised labels.
+        # negative label, but only trace_id can identify that pair reliably. Without it, repeated
+        # events for the same user and item must remain independent training observations.
         labelled = events[events["type"].isin(LABELLED_EVENTS)].copy()
-        identity = (["trace_id"] if "trace_id" in labelled.columns
-                    and labelled["trace_id"].fillna("").astype(str).ne("").any()
-                    else ["user_id", "item_id"])
-        clicked = labelled[labelled["type"] == CLICK][identity].drop_duplicates()
-        if not clicked.empty:
+        has_trace_id = ("trace_id" in labelled.columns
+                        and labelled["trace_id"].fillna("").astype(str).ne("").any())
+        if has_trace_id:
+            identity = ["trace_id"]
+            valid_trace = labelled["trace_id"].fillna("").astype(str).ne("")
+            clicked = labelled[(labelled["type"] == CLICK) & valid_trace][identity]
+            clicked = clicked.drop_duplicates()
             clicked["_clicked_impression"] = True
             labelled = labelled.merge(clicked, how="left", on=identity)
             labelled = labelled[~((labelled["type"] == EXPOSE)
