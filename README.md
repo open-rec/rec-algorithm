@@ -1,4 +1,4 @@
-# rec-algorithm
+# OpenRec Algorithms
 
 [![CI](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml/badge.svg)](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
@@ -293,23 +293,22 @@ Douban artifacts live in [model](https://github.com/open-rec/model).
 
 ## test
 
-The suites read their CSVs by paths **relative to the current working directory**, not to the test
-file, so they only pass when run from the test's own directory:
+Run tests from the repository root. Shared helpers resolve the deterministic fixture under
+`data/test`; copy it from `../example/data/test` as described in the install section when it is not
+already present:
 
 ```shell
-cd test/algorithm/recall && pytest test_i2i.py
-cd test/algorithm/rank   && pytest test_lr.py::test_train      # writes model/lr.pth
-cd test/algorithm/rank   && pytest test_lr.py::test_inference  # reads it back
+pytest -q test
+pytest -q test/algorithm/recall/test_item_cf_i2i.py
+pytest -q test/algorithm/rank/test_lr.py::test_train
+pytest -q test/jobs/spark/test_runner.py
 ```
 
-They expect the dataset at `data/test/` relative to the repo root (see install above).
-
-`test_i2i_merge.py` is the exception: it stubs out the only pandas-backed method and asserts the
-recall contract (truncation, dedup across triggers, ordering, caching) on fixed sequences, so it
-needs neither the CSVs nor a particular working directory:
+For the smallest recall-contract check, the merge test uses fixed sequences and needs neither Spark
+nor external services:
 
 ```shell
-pytest test/algorithm/recall/test_i2i_merge.py
+pytest -q test/algorithm/recall/test_item_cf_i2i_merge.py
 ```
 
 # data structure
