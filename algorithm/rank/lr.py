@@ -54,8 +54,10 @@ class EventDataSet(Dataset):
 
     def preprocess(self, feature_space=None):
         space = feature_space if feature_space is not None else FeatureSpace()
+        candidate_frame = (self.item_feature.items if hasattr(self.item_feature, "items")
+                           else self.item_feature.users)
         if not space.fitted:
-            space.fit(users=self.user_feature.users, items=self.item_feature.items)
+            space.fit(users=self.user_feature.users, items=candidate_frame)
         self._bind(space)
 
         # Keep only labelled events whose user and item we can actually encode. This used to be an
@@ -96,9 +98,11 @@ class EventDataSet(Dataset):
         self._label_values = self.labels.to_numpy()
 
     def _bind(self, space):
+        candidate_frame = (self.item_feature.items if hasattr(self.item_feature, "items")
+                           else self.item_feature.users)
         self.space = space
         user_map, item_map = space.build_maps(users=self.user_feature.users,
-                                              items=self.item_feature.items)
+                                              items=candidate_frame)
         self.user_feature_map = {k: v.astype(np.float32) for k, v in user_map.items()}
         self.item_feature_map = {k: v.astype(np.float32) for k, v in item_map.items()}
         self.dim = space.dim
@@ -152,7 +156,8 @@ class LRModel(nn.Module):
 class LRRecModel(RecModel):
 
     def __init__(self, user_feature=None, item_feature=None, events=None, feature_space=None,
-                 scene=DEFAULT_SCENE, model_file=None, feature_file=None, model_type="lr"):
+                 scene=DEFAULT_SCENE, model_file=None, feature_file=None, model_type="lr",
+                 target_type="item"):
         """
         Artifacts are filed per scene in the shared model store — `model/rank/{scene}/lr.pth` and
         `model/feature/{scene}/lr.features.json` — so a trained model survives across runs and does
@@ -171,7 +176,7 @@ class LRRecModel(RecModel):
             # reuse the persisted vocabulary rather than re-fitting encoders over the whole frame
             feature_space = FeatureSpace.load(self.feature_file)
         if feature_space is None:
-            feature_space = FeatureSpace.for_model(model_type)
+            feature_space = FeatureSpace.for_model(model_type, target_type)
 
         self.dataset = EventDataSet(user_feature=user_feature, item_feature=item_feature,
                                     events=events, feature_space=feature_space)

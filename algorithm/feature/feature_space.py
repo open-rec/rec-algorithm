@@ -188,16 +188,17 @@ def _default_item_columns():
 class FeatureSpace(object):
 
     def __init__(self, user_columns=None, item_columns=None, catalog_version=None,
-                 feature_set=None, model_type=None):
+                 feature_set=None, model_type=None, target_type="item"):
         self.user_columns = user_columns if user_columns is not None else _default_user_columns()
         self.item_columns = item_columns if item_columns is not None else _default_item_columns()
         self.catalog_version = catalog_version
         self.feature_set = feature_set
         self.model_type = model_type
+        self.target_type = target_type
         self.fitted = False
 
     @classmethod
-    def for_model(cls, model_type):
+    def for_model(cls, model_type, target_type="item"):
         """Build an unfitted space from the model's catalog-backed feature-set declaration."""
         selected = ModelFeatureSet.for_model(model_type)
 
@@ -207,9 +208,12 @@ class FeatureSpace(object):
                                feature_id=feature_id)
                     for feature_id, definition in items]
 
-        return cls(user_columns=columns(selected.user), item_columns=columns(selected.item),
+        if target_type not in ("item", "user"):
+            raise ValueError("target_type must be item or user")
+        target = selected.item if target_type == "item" else selected.user
+        return cls(user_columns=columns(selected.user), item_columns=columns(target),
                    catalog_version=selected.catalog_version, feature_set=selected.name,
-                   model_type=selected.model_type)
+                   model_type=selected.model_type, target_type=target_type)
 
     @property
     def user_width(self):
@@ -266,6 +270,7 @@ class FeatureSpace(object):
             "user_width": self.user_width,
             "item_width": self.item_width,
             "input_dim": self.dim,
+            "target_type": self.target_type,
         }
         if self.catalog_version is not None:
             payload["catalog_version"] = self.catalog_version
@@ -286,6 +291,7 @@ class FeatureSpace(object):
             catalog_version=payload.get("catalog_version"),
             feature_set=payload.get("feature_set"),
             model_type=payload.get("model_type"),
+            target_type=payload.get("target_type", "item"),
         )
         space.fitted = True
         for key, actual in (("user_width", space.user_width), ("item_width", space.item_width),

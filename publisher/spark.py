@@ -47,6 +47,9 @@ def publish_recall(frame, kind, business_date, revision="r001", hosts=None, user
                 elif kind == "user-cf-u2i":
                     source.update(user=row.user, item=row.item)
                     doc_id = "%s:%s:%s" % (row.scene, row.user, row.item)
+                elif kind in ("user-cf-u2u", "content-u2u", "user-emb-u2u"):
+                    source.update(left_user=row.left_user, right_user=row.right_user)
+                    doc_id = "%s:%s:%s" % (row.scene, row.left_user, row.right_user)
                 else:
                     source["item"] = row.item
                     doc_id = "%s:%s" % (row.scene, row.item)

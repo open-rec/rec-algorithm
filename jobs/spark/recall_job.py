@@ -6,25 +6,31 @@ from datetime import datetime, timedelta, timezone
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
-from jobs.spark.io import keep_active_item_events, read_events, read_items, write_result
-from jobs.spark.recall import content_i2i, hot, item_cf_i2i, item_seq_emb, new, user_cf_u2i
+from jobs.spark.io import keep_active_item_events, read_events, read_items, read_users, write_result
+from jobs.spark.recall import (content_i2i, content_u2u, hot, item_cf_i2i, item_seq_emb,
+                               new, user_cf_u2i, user_cf_u2u, user_emb_u2u)
 from publisher.spark import publish_embedding, publish_recall
 
 
 SERVING_TABLES = {
     "hot": "hot", "new": "new", "item_cf_i2i": "item-cf-i2i",
     "content_i2i": "content-i2i", "user_cf_u2i": "user-cf-u2i",
+    "user_cf_u2u": "user-cf-u2u", "content_u2u": "content-u2u",
+    "user_emb_u2u": "user-emb-u2u",
 }
 
 
 def parser():
     result = argparse.ArgumentParser(description="OpenRec distributed recall job")
     result.add_argument("algorithm", choices=("hot", "new", "item_cf_i2i", "item_seq_emb",
-                                               "user_cf_u2i", "content_i2i"))
+                                               "user_cf_u2i", "content_i2i", "user_cf_u2u",
+                                               "content_u2u", "user_emb_u2u"))
     result.add_argument("--event-table", default="openrec.event_entity")
     result.add_argument("--item-table", default="openrec.item_entity")
     result.add_argument("--event-path")
     result.add_argument("--item-path")
+    result.add_argument("--user-table", default="openrec.user_entity")
+    result.add_argument("--user-path")
     result.add_argument("--output-table")
     result.add_argument("--output-path")
     result.add_argument("--mode", default="overwrite", choices=("overwrite", "append"))
@@ -71,6 +77,16 @@ def run(args, spark=None):
             output = item_cf_i2i(events, args.size, args.event_type)
         elif args.algorithm == "user_cf_u2i":
             output = user_cf_u2i(events, args.size, args.neighbour_size, args.event_type)
+        elif args.algorithm == "user_cf_u2u":
+            output = user_cf_u2u(events, args.size, args.event_type)
+        elif args.algorithm == "content_u2u":
+            users = read_users(spark, args.user_table, args.date, cumulative=True,
+                               path=args.user_path)
+            user_scenes = events.select("scene", F.col("user_id").alias("id")).dropDuplicates()
+            output = content_u2u(users.join(user_scenes, "id"), args.size)
+        elif args.algorithm == "user_emb_u2u":
+            output = user_emb_u2u(events, args.size, args.vector_size,
+                                  event_type=args.event_type)
         else:
             output = item_seq_emb(events, args.vector_size, args.min_count,
                                   event_type=args.event_type)

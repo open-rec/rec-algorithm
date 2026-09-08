@@ -40,12 +40,13 @@ class FMRecModel(LRRecModel):
     """FM training and scoring with the same dataset and online feature contract as LR."""
 
     def __init__(self, user_feature=None, item_feature=None, events=None, feature_space=None,
-                 scene=DEFAULT_SCENE, model_file=None, feature_file=None, factor_dim=8):
+                 scene=DEFAULT_SCENE, model_file=None, feature_file=None, factor_dim=8,
+                 target_type="item"):
         model_file = model_file or rank_model_path(scene) / MODEL_FILENAME
         feature_file = feature_file or feature_path(scene) / FEATURE_FILENAME
         super().__init__(user_feature=user_feature, item_feature=item_feature, events=events,
                          feature_space=feature_space, scene=scene, model_file=model_file,
-                         feature_file=feature_file, model_type="fm")
+                         feature_file=feature_file, model_type="fm", target_type=target_type)
         self.model = FMModel(dim=self.dataset.feature_dim, factor_dim=factor_dim)
 
     def load(self):

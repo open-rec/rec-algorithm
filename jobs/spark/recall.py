@@ -1,6 +1,7 @@
 """Distributed recall formulas kept in parity with algorithm.recall."""
 
 from pyspark.ml.feature import Word2Vec
+from pyspark.ml.recommendation import ALS
 from pyspark.sql import Window
 from pyspark.sql import functions as F
 
@@ -97,6 +98,107 @@ def user_cf_u2i(events, size=1000, neighbour_size=50, event_type="click"):
     candidate_rank = Window.partitionBy("scene", "user").orderBy(F.desc("score"), F.asc("item"))
     return candidates.withColumn("rank", F.row_number().over(candidate_rank)) \
         .filter(F.col("rank") <= size).select("scene", "user", "item", "score")
+
+
+def user_cf_u2u(events, size=100, event_type="click"):
+    """Inverse-popularity weighted cosine similarity between users."""
+    frame = _events(events, event_type).filter(
+        F.col("user_id").isNotNull() & F.col("item_id").isNotNull()) \
+        .select("scene", "user_id", "item_id").dropDuplicates()
+    item_users = frame.groupBy("scene", "item_id").agg(F.collect_set("user_id").alias("users")) \
+        .withColumn("weight", 1.0 / F.log(F.size("users") + F.lit(1.0)))
+    pairs = item_users.select("scene", "weight", F.explode("users").alias("left_user"), "users") \
+        .select("scene", "weight", "left_user", F.explode("users").alias("right_user")) \
+        .filter(F.col("left_user") != F.col("right_user")) \
+        .groupBy("scene", "left_user", "right_user").agg(F.sum("weight").alias("dot"))
+    counts = frame.groupBy("scene", "user_id").count()
+    left = counts.select("scene", F.col("user_id").alias("left_user"),
+                         F.col("count").alias("left_count"))
+    right = counts.select("scene", F.col("user_id").alias("right_user"),
+                          F.col("count").alias("right_count"))
+    scored = pairs.join(left, ["scene", "left_user"]).join(right, ["scene", "right_user"]) \
+        .withColumn("score", F.col("dot") / F.sqrt(F.col("left_count") * F.col("right_count")))
+    ranked = Window.partitionBy("scene", "left_user").orderBy(F.desc("score"), F.asc("right_user"))
+    return scored.withColumn("rank", F.row_number().over(ranked)).filter(F.col("rank") <= size) \
+        .select("scene", "left_user", "right_user", "score")
+
+
+def content_u2u(users, size=100, content_columns=("gender", "country", "city", "tags")):
+    """TF-IDF cosine similarity over user profile content."""
+    available = [column for column in content_columns if column in users.columns]
+    scene = F.col("scene") if "scene" in users.columns else F.lit("default")
+    frame = users.filter(F.col("id").isNotNull()).withColumn("scene", scene) \
+        .dropDuplicates(["scene", "id"])
+    arrays = [F.transform(F.split(F.lower(F.coalesce(F.col(column).cast("string"), F.lit(""))),
+                                  r"[,/|\s]+"),
+                          lambda token: F.concat(F.lit(column + ":"), token))
+              for column in available]
+    if not arrays:
+        return users.sparkSession.createDataFrame(
+            [], "scene string, left_user string, right_user string, score double")
+    tokens = frame.select("scene", F.col("id").alias("user"),
+                          F.array_distinct(F.flatten(F.array(*arrays))).alias("tokens")) \
+        .select("scene", "user", F.explode("tokens").alias("token")).filter(~F.col("token").rlike(":$"))
+    docs = tokens.select("scene", "user").distinct().groupBy("scene").count() \
+        .withColumnRenamed("count", "document_count")
+    frequencies = tokens.groupBy("scene", "token").count().withColumnRenamed("count", "df")
+    weighted = tokens.join(docs, "scene").join(frequencies, ["scene", "token"]) \
+        .withColumn("weight", F.log((F.col("document_count") + 1.0) / (F.col("df") + 1.0)) + 1.0)
+    norms = weighted.groupBy("scene", "user").agg(
+        F.sqrt(F.sum(F.col("weight") * F.col("weight"))).alias("norm"))
+    left = weighted.select("scene", "token", F.col("user").alias("left_user"),
+                           F.col("weight").alias("left_weight"))
+    right = weighted.select("scene", "token", F.col("user").alias("right_user"),
+                            F.col("weight").alias("right_weight"))
+    dots = left.join(right, ["scene", "token"]).filter(F.col("left_user") != F.col("right_user")) \
+        .groupBy("scene", "left_user", "right_user").agg(
+            F.sum(F.col("left_weight") * F.col("right_weight")).alias("dot"))
+    left_norm = norms.select("scene", F.col("user").alias("left_user"), F.col("norm").alias("ln"))
+    right_norm = norms.select("scene", F.col("user").alias("right_user"), F.col("norm").alias("rn"))
+    scored = dots.join(left_norm, ["scene", "left_user"]).join(right_norm, ["scene", "right_user"]) \
+        .withColumn("score", F.col("dot") / (F.col("ln") * F.col("rn")))
+    ranked = Window.partitionBy("scene", "left_user").orderBy(F.desc("score"), F.asc("right_user"))
+    return scored.withColumn("rank", F.row_number().over(ranked)).filter(F.col("rank") <= size) \
+        .select("scene", "left_user", "right_user", "score")
+
+
+def user_emb_u2u(events, size=100, vector_size=32, max_iter=5, event_type="click"):
+    """ALS user factors followed by cosine U2U nearest-neighbour generation."""
+    frame = _events(events, event_type).filter(
+        F.col("user_id").isNotNull() & F.col("item_id").isNotNull()).select(
+            "scene", "user_id", "item_id").dropDuplicates()
+    scenes = [row.scene for row in frame.select("scene").distinct().collect()]
+    results = []
+    for scene in scenes:
+        values = frame.filter(F.col("scene") == scene)
+        users = values.select("user_id").distinct().withColumn(
+            "user", F.row_number().over(Window.orderBy("user_id")) - 1)
+        items = values.select("item_id").distinct().withColumn(
+            "item", F.row_number().over(Window.orderBy("item_id")) - 1)
+        ratings = values.join(users, "user_id").join(items, "item_id").withColumn("rating", F.lit(1.0))
+        model = ALS(rank=vector_size, maxIter=max_iter, implicitPrefs=True, seed=7,
+                    userCol="user", itemCol="item", ratingCol="rating", coldStartStrategy="drop").fit(ratings)
+        factors = model.userFactors.join(users, model.userFactors.id == users.user) \
+            .select("user_id", F.col("features").alias("vector")) \
+            .withColumn("norm", F.sqrt(F.aggregate("vector", F.lit(0.0),
+                lambda total, value: total + value * value)))
+        left = factors.select(F.col("user_id").alias("left_user"),
+                              F.col("vector").alias("lv"), F.col("norm").alias("ln"))
+        right = factors.select(F.col("user_id").alias("right_user"),
+                               F.col("vector").alias("rv"), F.col("norm").alias("rn"))
+        scored = left.crossJoin(right).filter(F.col("left_user") != F.col("right_user")) \
+            .withColumn("score", F.aggregate(F.zip_with("lv", "rv", lambda x, y: x * y), F.lit(0.0),
+                                             lambda total, value: total + value) / (F.col("ln") * F.col("rn"))) \
+            .withColumn("scene", F.lit(scene))
+        ranked = Window.partitionBy("scene", "left_user").orderBy(F.desc("score"), F.asc("right_user"))
+        results.append(scored.withColumn("rank", F.row_number().over(ranked))
+                       .filter(F.col("rank") <= size).select("scene", "left_user", "right_user", "score"))
+    if not results:
+        return events.sparkSession.createDataFrame(
+            [], "scene string, left_user string, right_user string, score double")
+    result = results[0]
+    for extra in results[1:]: result = result.unionByName(extra)
+    return result
 
 
 def content_i2i(items, cut_size=20, content_columns=("category", "tags", "title")):

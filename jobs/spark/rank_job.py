@@ -28,6 +28,7 @@ def parser():
     result.add_argument("--validation-ratio", type=float, default=.2)
     result.add_argument("--min-auc", type=float, default=0.0)
     result.add_argument("--model-type", choices=("lr", "fm"), default="lr")
+    result.add_argument("--target-type", choices=("item", "user"), default="item")
     result.add_argument("--factor-dim", type=int, default=8)
     result.add_argument("--max-events", type=int, default=200000)
     return result
@@ -52,6 +53,29 @@ def _freeze_feature_history(all_events, labelled_events):
     if cutoff is None:
         raise ValueError("rank training data has no labelled events")
     return all_events.filter(F.col("time") < F.lit(cutoff)), cutoff
+
+
+def _user_pair_events(events, users, max_events):
+    positive = events.filter(F.col("type").isin("click", "buy", "collect"))
+    pairs = positive.alias("l").join(
+        positive.alias("r"),
+        (F.col("l.scene") == F.col("r.scene"))
+        & (F.col("l.item_id") == F.col("r.item_id"))
+        & (F.col("l.user_id") != F.col("r.user_id"))) \
+        .select(F.col("l.user_id").alias("user_id"),
+                F.col("r.user_id").alias("item_id"),
+                F.greatest(F.col("l.time"), F.col("r.time")).alias("time")) \
+        .dropDuplicates(["user_id", "item_id"])
+    ids = users.select(F.col("id").cast("string").alias("id")).dropDuplicates()
+    negatives = ids.alias("l").crossJoin(ids.alias("r")) \
+        .filter(F.col("l.id") != F.col("r.id")) \
+        .select(F.col("l.id").alias("user_id"), F.col("r.id").alias("item_id")) \
+        .join(pairs.select("user_id", "item_id"), ["user_id", "item_id"], "left_anti") \
+        .limit(max_events).withColumn("time", F.lit(int(events.agg(F.max("time")).first()[0])))
+    return pairs.withColumn("type", F.lit("click")) \
+        .unionByName(negatives.withColumn("type", F.lit("expose"))) \
+        .withColumn("trace_id", F.concat_ws("-", F.lit("u2u"), "user_id", "item_id")) \
+        .limit(max_events)
 
 
 def run(args, spark=None):
@@ -79,12 +103,15 @@ def run(args, spark=None):
     users = read_users(spark, date=args.date, cumulative=True, path=args.user_path)
     active_events = events.join(items.select(F.col("id").alias("active_item")),
                                 events.item_id == F.col("active_item"), "left_semi")
+    if args.target_type == "user":
+        active_events = _user_pair_events(all_events.filter(F.col("scene") == args.scene),
+                                          users, args.max_events)
     event_frame, feature_event_frame, item_frame, user_frame = (
         active_events.toPandas(), feature_events.toPandas(), items.toPandas(), users.toPandas())
     if event_frame.empty or item_frame.empty or user_frame.empty:
         raise ValueError("rank training data is empty after active entity filtering")
     version = "%s-%s" % (args.date.replace("-", ""), args.revision)
-    dataset_dir = Path(args.artifact_root).parent / "training" / args.scene / version
+    dataset_dir = Path(args.artifact_root).parent / "training" / args.target_type / args.scene / version
     if dataset_dir.exists():
         shutil.rmtree(dataset_dir)
     dataset_dir.mkdir(parents=True)
@@ -100,6 +127,7 @@ def run(args, spark=None):
                               "batch_size": args.batch_size,
                               "validation_ratio": args.validation_ratio,
                               "min_auc": args.min_auc, "model_type": args.model_type,
+                              "target_type": args.target_type,
                               "factor_dim": args.factor_dim,
                               "feature_cutoff_time": int(feature_cutoff_time)}).encode()
         request = urllib.request.Request(os.environ.get(

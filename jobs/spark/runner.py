@@ -8,7 +8,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-ALGORITHMS = ("hot", "new", "item_cf_i2i", "item_seq_emb", "user_cf_u2i", "content_i2i")
+ALGORITHMS = ("hot", "new", "item_cf_i2i", "item_seq_emb", "user_cf_u2i", "content_i2i",
+              "user_cf_u2u", "content_u2u", "user_emb_u2u")
 PUBLISHABLE_ALGORITHMS = ALGORITHMS
 JOB_LOCK = threading.Lock()
 
@@ -18,8 +19,7 @@ def recall_command(payload):
     business_date = payload.get("date")
     revision = payload.get("revision", "r001")
     if algorithm not in ALGORITHMS:
-        raise ValueError("algorithm must be hot, new, item_cf_i2i, content_i2i, "
-                         "user_cf_u2i or item_seq_emb")
+        raise ValueError("unsupported recall algorithm: %s" % algorithm)
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
         raise ValueError("date must use YYYY-MM-DD")
     if not re.match(r"^r\d{3,}$", revision):
@@ -40,6 +40,8 @@ def recall_command(payload):
             "OPENREC_EVENT_PATH", "hdfs://namenode:8020/openrec/hive/event"),
         "--item-path", os.environ.get(
             "OPENREC_ITEM_PATH", "hdfs://namenode:8020/openrec/hive/item"),
+        "--user-path", os.environ.get(
+            "OPENREC_USER_PATH", "hdfs://namenode:8020/openrec/hive/user"),
         "--output-path", os.environ.get(
             "OPENREC_RECALL_PATH", "hdfs://namenode:8020/openrec/hive/recall") + "/" + algorithm,
         "--es-host", "https://elasticsearch:9200",
@@ -50,14 +52,14 @@ def recall_command(payload):
     ]
     if algorithm in PUBLISHABLE_ALGORITHMS:
         command.append("--publish")
-    if algorithm == "item_seq_emb":
+    if algorithm in ("item_seq_emb", "user_emb_u2u"):
         command.extend(["--vector-size", str(payload.get("vector_size", 10)),
                         "--min-count", str(payload.get("min_count", 1))])
     if algorithm in ("item_cf_i2i", "content_i2i"):
         command.extend(["--size", str(payload.get("size", 20))])
     else:
         command.extend(["--size", str(payload.get("size", 1000))])
-    if algorithm == "user_cf_u2i":
+    if algorithm in ("user_cf_u2i", "user_cf_u2u"):
         command.extend(["--neighbour-size", str(payload.get("neighbour_size", 50))])
     return command
 
@@ -67,6 +69,7 @@ def rank_command(payload):
     revision = payload.get("revision", "r001")
     scene = payload.get("scene", "scene_0")
     model_type = payload.get("model_type", "lr")
+    target_type = payload.get("target_type", "item")
     factor_dim = int(payload.get("factor_dim", 8))
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
         raise ValueError("date must use YYYY-MM-DD")
@@ -76,6 +79,8 @@ def rank_command(payload):
         raise ValueError("invalid scene")
     if model_type not in ("lr", "fm"):
         raise ValueError("model_type must be lr or fm")
+    if target_type not in ("item", "user"):
+        raise ValueError("target_type must be item or user")
     if not 1 <= factor_dim <= 256:
         raise ValueError("factor_dim must be between 1 and 256")
     return [
@@ -90,7 +95,8 @@ def rank_command(payload):
         "--user-path", os.environ.get("OPENREC_USER_PATH", "hdfs://namenode:8020/openrec/hive/user"),
         "--artifact-root", os.environ.get("MODEL_ARTIFACT_ROOT", "/models/releases"),
         "--epochs", str(payload.get("epochs", 5)), "--min-auc", str(payload.get("min_auc", 0.0)),
-        "--model-type", model_type, "--factor-dim", str(factor_dim),
+        "--model-type", model_type, "--target-type", target_type,
+        "--factor-dim", str(factor_dim),
         "--max-events", str(payload.get("max_events", 200000)),
     ]
 

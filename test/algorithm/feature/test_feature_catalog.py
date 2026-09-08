@@ -94,3 +94,11 @@ def test_serving_lists_match_training_multi_values_and_numeric_outliers_are_boun
     outlier.loc[0, "event_count"] = 1000000
     encoded = space.transform_users(outlier)
     assert np.max(np.abs(encoded)) <= 3.0
+
+
+def test_user_rank_uses_the_user_contract_on_both_sides():
+    users, _ = frames()
+    space = FeatureSpace.for_model("lr", target_type="user").fit(users, users)
+    assert space.target_type == "user"
+    assert space.user_width == space.item_width
+    assert all(column.feature_id.startswith("user.") for column in space.item_columns)

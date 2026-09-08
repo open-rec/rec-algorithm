@@ -19,12 +19,15 @@ from tool.gen_recall_data import generate as generate_recall
 
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 4
+BUILD_VERSION = 5
 REQUIRED = (
-    "feature/default/user_feature.csv", "feature/default/item_feature.csv",
-    "feature/default/lr.features.json", "feature/default/fm.features.json",
-    "rank/default/lr.pth", "rank/default/fm.pth",
-    "rank/default/lr.manifest.json", "rank/default/fm.manifest.json",
+    "feature/item/user_feature.csv", "feature/item/item_feature.csv",
+    "feature/item/lr.features.json", "feature/item/fm.features.json",
+    "feature/user/user_feature.csv", "feature/user/lr.features.json",
+    "feature/user/fm.features.json", "rank/item/lr.pth", "rank/item/fm.pth",
+    "rank/item/lr.manifest.json", "rank/item/fm.manifest.json",
+    "rank/user/lr.pth", "rank/user/fm.pth",
+    "rank/user/lr.manifest.json", "rank/user/fm.manifest.json",
     "recall/item_cf_i2i.csv", "recall/content_i2i.csv", "recall/user_cf_u2i.csv",
     "recall/hot.csv", "recall/new.csv", "recall/item_seq_emb.csv",
 )
@@ -58,14 +61,16 @@ def reusable(model_root, inputs):
         return False
 
 
-def _train(model_class, model_type, users, items, feature_events, labels, cutoff, stage,
-           epochs, factor_dim, min_auc):
-    model_file = stage / "rank/default" / (model_type + ".pth")
-    feature_file = stage / "feature/default" / (model_type + ".features.json")
+def _train(model_class, model_type, users, candidates, feature_events, labels, cutoff, stage,
+           epochs, factor_dim, min_auc, target_type="item"):
+    model_file = stage / "rank" / target_type / (model_type + ".pth")
+    feature_file = stage / "feature" / target_type / (model_type + ".features.json")
     kwargs = {"factor_dim": factor_dim} if model_type == "fm" else {}
-    model = model_class(UserFeature(users, feature_events, cutoff),
-                        ItemFeature(items, feature_events, cutoff), labels,
-                        scene="default", model_file=model_file, feature_file=feature_file, **kwargs)
+    candidate_features = (ItemFeature(candidates, feature_events, cutoff) if target_type == "item"
+                          else UserFeature(candidates, feature_events, cutoff))
+    model = model_class(UserFeature(users, feature_events, cutoff), candidate_features, labels,
+                        scene=target_type, model_file=model_file, feature_file=feature_file,
+                        target_type=target_type, **kwargs)
     if not len(model.dataset) or model.dataset.positive_rate in (0.0, 1.0):
         raise ValueError("%s training requires non-empty click and unclicked-expose labels" % model_type)
     model.train(epoch_num=epochs, batch_size=256, val_ratio=.2)
@@ -78,7 +83,8 @@ def _train(model_class, model_type, users, items, feature_events, labels, cutoff
     model.save()
     feature_space = model.dataset.feature_space
     manifest = {
-        "version": "default", "scene": "default", "model_type": model_type,
+        "version": "default", "scene": target_type, "model_type": model_type,
+        "target_type": target_type,
         "created_at": datetime.now(timezone.utc).isoformat(), "status": "evaluated",
         "feature_cutoff_time": cutoff, "model": model_file.name, "feature": feature_file.name,
         "feature_set": feature_space.feature_set, "catalog_version": feature_space.catalog_version,
@@ -88,8 +94,33 @@ def _train(model_class, model_type, users, items, feature_events, labels, cutoff
                     **({"factor_dim": model.model.factor_dim} if model_type == "fm" else {})},
         "gate": {"min_auc": min_auc, "passed": True},
     }
-    (stage / "rank/default" / (model_type + ".manifest.json")).write_text(
+    (stage / "rank" / target_type / (model_type + ".manifest.json")).write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
+def _user_pair_labels(events, users):
+    """Derive balanced U2U supervision from shared positive item behaviour."""
+    positive_events = events[events["type"].isin(("click", "buy", "collect"))].copy()
+    pairs = positive_events.merge(positive_events, on=["scene", "item_id"], suffixes=("", "_r"))
+    pairs = pairs[pairs["user_id"] != pairs["user_id_r"]]
+    positives = pairs[["user_id", "user_id_r", "time"]].drop_duplicates(
+        ["user_id", "user_id_r"]).rename(columns={"user_id_r": "item_id"})
+    positives["type"] = "click"
+    ids = users["id"].dropna().astype(str).drop_duplicates().tolist()
+    all_pairs = pd.DataFrame([(left, right) for left in ids for right in ids if left != right],
+                             columns=["user_id", "item_id"])
+    negatives = all_pairs.merge(positives[["user_id", "item_id"]].assign(hit=True),
+                                how="left", on=["user_id", "item_id"])
+    negatives = negatives[negatives["hit"].isna()].drop(columns="hit").head(len(positives))
+    negatives["type"] = "expose"
+    negatives["time"] = int(pd.to_numeric(events["time"], errors="coerce").max())
+    result = pd.concat([positives, negatives], ignore_index=True)
+    result = result.sample(frac=1.0, random_state=42).reset_index(drop=True)
+    result["time"] = range(len(result))
+    result["trace_id"] = ["u2u-%d" % index for index in range(len(result))]
+    if result.empty or result["type"].nunique() != 2:
+        raise ValueError("user rank training requires shared positive behaviour and negative pairs")
+    return result
 
 
 def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False):
@@ -100,7 +131,7 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
     model_root.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".default-build-", dir=str(model_root)))
     try:
-        for relative in ("feature/default", "rank/default", "recall"):
+        for relative in ("feature/item", "feature/user", "rank/item", "rank/user", "recall"):
             (stage / relative).mkdir(parents=True)
         users = pd.read_csv(data_dir / "user.csv")
         items = pd.read_csv(data_dir / "item.csv")
@@ -116,12 +147,18 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
         item_snapshot = ItemFeature(items, feature_events, cutoff).items.copy()
         user_snapshot.insert(1, "as_of_time", cutoff)
         item_snapshot.insert(1, "as_of_time", cutoff)
-        user_snapshot.to_csv(stage / "feature/default/user_feature.csv", index=False)
-        item_snapshot.to_csv(stage / "feature/default/item_feature.csv", index=False)
+        user_snapshot.to_csv(stage / "feature/item/user_feature.csv", index=False)
+        item_snapshot.to_csv(stage / "feature/item/item_feature.csv", index=False)
+        user_snapshot.to_csv(stage / "feature/user/user_feature.csv", index=False)
         _train(LRRecModel, "lr", users, items, feature_events, labels, cutoff, stage,
-               epochs, factor_dim, min_auc)
+               epochs, factor_dim, min_auc, "item")
         _train(FMRecModel, "fm", users, items, feature_events, labels, cutoff, stage,
-               epochs, factor_dim, min_auc)
+               epochs, factor_dim, min_auc, "item")
+        user_labels = _user_pair_labels(events, users)
+        _train(LRRecModel, "lr", users, users, feature_events, user_labels, cutoff, stage,
+               epochs, factor_dim, 0.0, "user")
+        _train(FMRecModel, "fm", users, users, feature_events, user_labels, cutoff, stage,
+               epochs, factor_dim, 0.0, "user")
         generate_recall(data_dir / "item.csv", data_dir / "event.csv", stage / "recall")
 
         outputs = {name: sha256(stage / name) for name in REQUIRED}

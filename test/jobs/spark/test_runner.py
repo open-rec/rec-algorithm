@@ -25,11 +25,13 @@ def test_runner_builds_versioned_es_publish_command(monkeypatch):
     assert "--publish" in command
 
 
-@pytest.mark.parametrize("algorithm", ["user_cf_u2i", "content_i2i"])
+@pytest.mark.parametrize("algorithm", ["user_cf_u2i", "content_i2i", "user_cf_u2u",
+                                       "content_u2u", "user_emb_u2u"])
 def test_runner_builds_publishable_complementary_recall_jobs(algorithm):
     command = recall_command({"algorithm": algorithm, "date": "2026-08-19"})
 
     assert command[command.index("--output-path") + 1].endswith("/recall/" + algorithm)
+    assert command[command.index("--user-path") + 1].endswith("/openrec/hive/user")
     assert "--publish" in command
 
 
