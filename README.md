@@ -49,8 +49,8 @@ bash package.sh                              # -> dist/rec_algorithm-0.0.1-*.whl
 
 | Path | Contents |
 |---|---|
-| `algorithm/recall/` | `item_cf_i2i`, `user_cf_u2i`, `content_i2i`, `hot`, `new`, `item_seq_emb` strategies — all subclass `Recall` |
-| `algorithm/rank/` | `LRModel` / `LRRecModel`, subclassing `RecModel` |
+| `algorithm/recall/` | Item and user recall strategies: CF, content similarity, hot/new, sequence embedding, and ALS-based U2U |
+| `algorithm/rank/` | LR/FM item and user rank models, subclassing `RecModel` |
 | `algorithm/feature/` | feature encoders for users and items |
 | `algorithm/meta/` | table and column definitions — the source of truth for CSV headers |
 | `algorithm/structure/` | `ScoreItem`, JSON helpers |
@@ -104,6 +104,8 @@ Use `new` with `--item-table openrec.item_entity`. Output schemas are stable:
 - content_i2i: `scene, left_item, right_item, score`
 - user_cf_u2i: `scene, user, item, score`
 - item_seq_emb: `scene, item, vector`
+- user_cf_u2u/content_u2u/user_emb_u2u: `scene, left_user, right_user, score`; the ALS job
+  publishes to `user-als-emb` for the serving `user_als_emb` channel
 
 All source and result tables are partitioned by UTC `dt`. `--date` defaults to yesterday, so a
 daily scheduler can invoke the same command without calculating a date; passing it explicitly is
@@ -119,7 +121,8 @@ the requested day, and uses dynamic partition overwrite so rerunning one day doe
 result partitions. Table-based reads and writes remain available for compatible metastores.
 
 With `--publish`, non-vector algorithms are staged under their serving table names:
-`hot`, `new`, `item-cf-i2i`, `content-i2i`, and `user-cf-u2i`. Physical indexes use
+`hot`, `new`, `item-cf-i2i`, `content-i2i`, `user-cf-u2i`, `user-cf-u2u`, `content-u2u`, and
+`user-als-emb`. Physical indexes use
 `openrec-recall-{tableName}-{YYYYMMDD}-{revision}`. `rec-console` creates the staging index before
 Spark writes it, then verifies the document count, atomically moves
 `openrec-recall-{tableName}-active`, and removes versions beyond the configured retention after the
@@ -197,9 +200,12 @@ implement a `dump_*` method used to write the offline tables.
 | Algorithm | Class | Method |
 |---|---|---|
 | item_cf_i2i | `ItemBasedI2I` | item co-occurrence within a user's sequence, damped by `1/log(len+1)`, normalized by `sqrt(count_i * count_j)` |
-| user_cf | `UserBasedCF` | inverse-popularity weighted user similarity, followed by unseen-item aggregation from the top similar users |
+| user_cf_u2i | `UserBasedCF` | inverse-popularity weighted user similarity, followed by unseen-item aggregation from the top similar users |
 | content | `ContentBasedI2I` | TF-IDF cosine similarity over field-prefixed category, tags and title tokens |
 | item_seq_emb | `EventEmbedding` | word2vec (gensim) over per-user item sequences; `dump_vectors` exports 10-dim vectors |
+| user_cf_u2u | Spark `user_cf_u2u` | inverse-popularity weighted shared-item similarity between users |
+| content_u2u | Spark `content_u2u` | profile-token Jaccard similarity between users |
+| user_emb_u2u | Spark `user_emb_u2u` | ALS latent user vectors, published under the `user-als-emb` serving name |
 | hot | `Hot` | click counts normalized by the maximum |
 | new | `New` | freshness min-max normalized over the observed `pub_time` range, raised to `power` (31) |
 
@@ -208,9 +214,9 @@ implemented sparse content recall path and requires no model service or external
 
 All of them are computed **per scene** — group events by `scene` before constructing them, as
 `gen_recall_data.py` does. `item_cf_i2i`, `content_i2i`, and `item_seq_emb` require item triggers;
-`user_cf_u2i` requires a user
-trigger; hot and new do not. Spark `user_cf` and `content` write Hive/Parquet results and publish
-their serving tables through the same versioned release protocol as hot and item-CF.
+`user_cf_u2i` requires a user trigger; User U2U algorithms produce candidate-user rows or vectors;
+hot and new do not require triggers. Spark recall jobs write Hive/Parquet results and publish their
+serving tables through the same versioned release protocol as hot and item-CF.
 
 Two behaviours worth knowing:
 
@@ -229,7 +235,7 @@ item_feature = ItemFeature(items=items, events=events)
 
 lr_model = LRRecModel(user_feature=user_feature, item_feature=item_feature, events=events)
 lr_model.train(epoch_num=10, batch_size=256, learning_rate=0.003)
-lr_model.save()                    # -> model/lr.pth
+lr_model.save()                    # -> model/rank/default/lr.pth
 
 lr_model.load()
 lr_model.score("user_0", ["item_0", "item_1"])
