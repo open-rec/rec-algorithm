@@ -153,8 +153,12 @@ The same operation is exposed in the Airflow UI as the manual
 configuration.
 
 The cluster runner also exposes internal `POST /jobs/rank/train`. Its Spark job reads cumulative
-event, item, and user partitions through `date`, uses click/expose labels from the requested UTC
-business day, joins interactions to the latest active entity snapshot for that date,
+event, item, and user partitions through `date`. Item rank uses click/expose labels from the
+requested UTC business day. User rank uses a seven-day label window by default
+(`user_label_window_days`, range 1-30): shared positive interactions form U2U positives, while an
+equal number of deterministic negatives are sampled only from users active in that window. All
+behavioural features are frozen strictly before the earliest label; generated negatives inherit
+their source user's label time. The job joins candidates to the latest available entity snapshot
 and hands the bounded prepared dataset to rank-engine for PyTorch training and evaluation. Rank
 submissions default to four total executor cores (`RANK_SPARK_CORES=4`) and emit a version manifest
 for the Airflow `openrec_rank_model` publish task.
@@ -248,6 +252,8 @@ so rec-console can validate and atomically deploy or roll back either type.
 
 Labels come from the event type: `click` is 1 and an unclicked `expose` is 0. When an impression has
 both events, its expose remains available to behavioural aggregation but is not a negative label.
+For User rank, validation reserves the newest examples independently within each label so tied
+synthetic-negative timestamps cannot leave the holdout single-class and make AUC undefined.
 
 Features used are deliberately a subset — country, city, gender, age and tags for users; category,
 scene and weight for items — plus the event snapshot statistics described below. Raw ids, names and titles are excluded because one-hot encoding them

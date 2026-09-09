@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import urllib.request
 
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import SparkSession, Window, functions as F
 
 from jobs.spark.io import read_events, read_items, read_users
 
@@ -31,6 +31,7 @@ def parser():
     result.add_argument("--target-type", choices=("item", "user"), default="item")
     result.add_argument("--factor-dim", type=int, default=8)
     result.add_argument("--max-events", type=int, default=200000)
+    result.add_argument("--user-label-window-days", type=int, default=7)
     return result
 
 
@@ -45,6 +46,8 @@ def _validate(args):
         raise ValueError("invalid evaluation threshold or validation ratio")
     if not 1 <= args.factor_dim <= 256:
         raise ValueError("factor_dim must be between 1 and 256")
+    if not 1 <= args.user_label_window_days <= 30:
+        raise ValueError("user_label_window_days must be between 1 and 30")
 
 
 def _freeze_feature_history(all_events, labelled_events):
@@ -56,7 +59,13 @@ def _freeze_feature_history(all_events, labelled_events):
 
 
 def _user_pair_events(events, users, max_events):
-    positive = events.filter(F.col("type").isin("click", "buy", "collect"))
+    """Build balanced point-in-time U2U labels from active users in one label window."""
+    user_ids = users.select(F.col("id").cast("string").alias("id")).dropDuplicates()
+    positive = events.filter(F.col("type").isin("click", "buy", "collect")) \
+        .filter(F.col("user_id").isNotNull() & F.col("item_id").isNotNull()) \
+        .select("scene", "user_id", "item_id", "time") \
+        .join(user_ids, F.col("user_id") == F.col("id"), "left_semi") \
+        .dropDuplicates()
     pairs = positive.alias("l").join(
         positive.alias("r"),
         (F.col("l.scene") == F.col("r.scene"))
@@ -65,17 +74,27 @@ def _user_pair_events(events, users, max_events):
         .select(F.col("l.user_id").alias("user_id"),
                 F.col("r.user_id").alias("item_id"),
                 F.greatest(F.col("l.time"), F.col("r.time")).alias("time")) \
-        .dropDuplicates(["user_id", "item_id"])
-    ids = users.select(F.col("id").cast("string").alias("id")).dropDuplicates()
-    negatives = ids.alias("l").crossJoin(ids.alias("r")) \
+        .groupBy("user_id", "item_id").agg(F.min("time").alias("time"))
+    active_ids = positive.select(F.col("user_id").alias("id")).dropDuplicates()
+    source_stats = pairs.groupBy("user_id").agg(
+        F.count("*").alias("positive_count"), F.max("time").alias("label_time"))
+    negative_rank = Window.partitionBy("user_id").orderBy(F.xxhash64("user_id", "item_id"))
+    negatives = active_ids.alias("l").crossJoin(active_ids.alias("r")) \
         .filter(F.col("l.id") != F.col("r.id")) \
         .select(F.col("l.id").alias("user_id"), F.col("r.id").alias("item_id")) \
         .join(pairs.select("user_id", "item_id"), ["user_id", "item_id"], "left_anti") \
-        .limit(max_events).withColumn("time", F.lit(int(events.agg(F.max("time")).first()[0])))
-    return pairs.withColumn("type", F.lit("click")) \
-        .unionByName(negatives.withColumn("type", F.lit("expose"))) \
+        .join(source_stats, "user_id") \
+        .withColumn("rank", F.row_number().over(negative_rank)) \
+        .filter(F.col("rank") <= F.col("positive_count")) \
+        .select("user_id", "item_id", F.col("label_time").alias("time"))
+    per_class_limit = max(1, max_events // 2)
+    positives = pairs.orderBy(F.xxhash64("user_id", "item_id")).limit(per_class_limit) \
+        .withColumn("type", F.lit("click"))
+    negatives = negatives.orderBy(F.xxhash64("user_id", "item_id")).limit(per_class_limit) \
+        .withColumn("type", F.lit("expose"))
+    return positives.unionByName(negatives) \
         .withColumn("trace_id", F.concat_ws("-", F.lit("u2u"), "user_id", "item_id")) \
-        .limit(max_events)
+        .orderBy("time", "user_id", "item_id", "type")
 
 
 def run(args, spark=None):
@@ -83,32 +102,33 @@ def run(args, spark=None):
     spark = spark or SparkSession.builder.appName("openrec-rank-train").enableHiveSupport().getOrCreate()
     all_events = read_events(spark, date=args.date, cumulative=True, path=args.event_path)
     business_day = datetime.strptime(args.date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    label_from = int(business_day.timestamp())
+    label_days = args.user_label_window_days if args.target_type == "user" else 1
+    label_from = int((business_day - timedelta(days=label_days - 1)).timestamp())
     label_until = int((business_day + timedelta(days=1)).timestamp())
-    events = all_events \
-        .filter((F.col("scene") == args.scene) & F.col("type").isin("click", "expose")
-                & (F.col("time") >= label_from) & (F.col("time") < label_until)) \
+    label_window = all_events.filter(
+        (F.col("scene") == args.scene) & (F.col("time") >= label_from)
+        & (F.col("time") < label_until))
+    events = label_window.filter(F.col("type").isin("click", "expose")) \
         .orderBy(F.desc("time")).limit(args.max_events)
 
     # One frozen, strictly-prior snapshot is shared by all samples in this training run. This is a
     # deliberately conservative point-in-time contract: neither a label event itself nor any later
     # train/validation event can enter its behavioural features.
-    feature_events, feature_cutoff_time = _freeze_feature_history(all_events, events)
-    # Entity snapshots are the latest active state within the requested business date. Behavioural
-    # aggregates alone use the strictly-prior cutoff; filtering profiles by the first label time
-    # would incorrectly remove entities inserted earlier on the same day but processed milliseconds
-    # after a client-generated event timestamp.
+    # The current entity history predates point-in-time snapshots: fixture/client event timestamps
+    # can be earlier than the corresponding entity mutation. Keep the latest profile snapshot for
+    # compatibility, while behavioural aggregates below remain strictly prior to every label.
+    # Once entity CDC history is complete, these reads can also use feature_cutoff_time.
     items = read_items(spark, date=args.date, cumulative=True, path=args.item_path) \
         .filter(F.col("scene") == args.scene)
     users = read_users(spark, date=args.date, cumulative=True, path=args.user_path)
     active_events = events.join(items.select(F.col("id").alias("active_item")),
                                 events.item_id == F.col("active_item"), "left_semi")
     if args.target_type == "user":
-        active_events = _user_pair_events(all_events.filter(F.col("scene") == args.scene),
-                                          users, args.max_events)
+        active_events = _user_pair_events(label_window, users, args.max_events)
+    feature_events, feature_cutoff_time = _freeze_feature_history(all_events, active_events)
     event_frame, feature_event_frame, item_frame, user_frame = (
         active_events.toPandas(), feature_events.toPandas(), items.toPandas(), users.toPandas())
-    if event_frame.empty or item_frame.empty or user_frame.empty:
+    if event_frame.empty or user_frame.empty or (args.target_type == "item" and item_frame.empty):
         raise ValueError("rank training data is empty after active entity filtering")
     version = "%s-%s" % (args.date.replace("-", ""), args.revision)
     dataset_dir = Path(args.artifact_root).parent / "training" / args.target_type / args.scene / version

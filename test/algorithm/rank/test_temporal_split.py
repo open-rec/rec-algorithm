@@ -32,3 +32,24 @@ def test_validation_split_holds_out_newest_events():
     validation_times = model.dataset.events.iloc[list(validation.indices)]["time"]
     assert list(train_times) == [10, 20]
     assert list(validation_times) == [30, 40]
+
+
+def test_user_validation_split_preserves_both_labels():
+    users = pd.DataFrame([
+        {"id": value, "country": "CN", "city": "HZ", "gender": 1,
+         "age": 20, "tags": "tech"}
+        for value in ("u1", "u2", "u3")
+    ])
+    events = pd.DataFrame([
+        {"user_id": "u1", "item_id": candidate, "type": event_type, "time": event_time}
+        for candidate, event_type, event_time in (
+            ("u2", "click", 10), ("u3", "click", 20),
+            ("u2", "expose", 30), ("u3", "expose", 30))
+    ])
+    model = LRRecModel(UserFeature(users, pd.DataFrame()),
+                       UserFeature(users, pd.DataFrame()), events, target_type="user")
+
+    training, validation = model._split(val_ratio=.5)
+
+    assert set(model.dataset.labels.iloc[list(training.indices)]) == {0, 1}
+    assert set(model.dataset.labels.iloc[list(validation.indices)]) == {0, 1}

@@ -71,6 +71,7 @@ def rank_command(payload):
     model_type = payload.get("model_type", "lr")
     target_type = payload.get("target_type", "item")
     factor_dim = int(payload.get("factor_dim", 8))
+    user_label_window_days = int(payload.get("user_label_window_days", 7))
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
         raise ValueError("date must use YYYY-MM-DD")
     if not re.match(r"^r\d{3,}$", revision):
@@ -83,6 +84,8 @@ def rank_command(payload):
         raise ValueError("target_type must be item or user")
     if not 1 <= factor_dim <= 256:
         raise ValueError("factor_dim must be between 1 and 256")
+    if not 1 <= user_label_window_days <= 30:
+        raise ValueError("user_label_window_days must be between 1 and 30")
     return [
         "/opt/spark/bin/spark-submit", "--master", os.environ.get(
             "SPARK_MASTER_URL", "spark://spark-master:7077"),
@@ -97,6 +100,7 @@ def rank_command(payload):
         "--epochs", str(payload.get("epochs", 5)), "--min-auc", str(payload.get("min_auc", 0.0)),
         "--model-type", model_type, "--target-type", target_type,
         "--factor-dim", str(factor_dim),
+        "--user-label-window-days", str(user_label_window_days),
         "--max-events", str(payload.get("max_events", 200000)),
     ]
 

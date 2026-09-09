@@ -171,6 +171,7 @@ class LRRecModel(RecModel):
         self.model_file = str(model_file) if model_file else str(rank_model_path(scene) / MODEL_FILENAME)
         self.feature_file = (str(feature_file) if feature_file
                              else str(feature_path(scene) / FEATURE_FILENAME))
+        self.target_type = target_type
 
         if feature_space is None and Path(self.feature_file).exists():
             # reuse the persisted vocabulary rather than re-fitting encoders over the whole frame
@@ -299,6 +300,23 @@ class LRRecModel(RecModel):
         val_size = int(total * val_ratio) if val_ratio else 0
         if val_size <= 0 or val_size >= total:
             return self.dataset, None
+        if self.target_type == "user":
+            # Synthetic U2U negatives can share one timestamp. A plain chronological tail can
+            # therefore contain only negatives and make AUC undefined. Keep the temporal order
+            # within each label while reserving both classes for validation.
+            train_indices, validation_indices = [], []
+            labels = self.dataset.labels.to_numpy()
+            for label in np.unique(labels):
+                indices = np.flatnonzero(labels == label)
+                label_val_size = max(1, int(len(indices) * val_ratio))
+                if label_val_size >= len(indices):
+                    train_indices.extend(indices.tolist())
+                    continue
+                train_indices.extend(indices[:-label_val_size].tolist())
+                validation_indices.extend(indices[-label_val_size:].tolist())
+            if validation_indices:
+                return (Subset(self.dataset, sorted(train_indices)),
+                        Subset(self.dataset, sorted(validation_indices)))
         boundary = total - val_size
         return (Subset(self.dataset, range(0, boundary)),
                 Subset(self.dataset, range(boundary, total)))

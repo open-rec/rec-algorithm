@@ -48,18 +48,21 @@ def test_runner_rejects_invalid_job(payload):
 def test_rank_command_caps_spark_and_uses_cumulative_entity_paths():
     command = rank_command({"date": "2026-08-21", "revision": "r002",
                             "scene": "scene_0", "epochs": 3, "min_auc": .5,
-                            "model_type": "fm", "factor_dim": 16})
+                            "model_type": "fm", "factor_dim": 16,
+                            "user_label_window_days": 14})
     assert command[command.index("--total-executor-cores") + 1] == "4"
     assert command[command.index("--user-path") + 1].endswith("/openrec/hive/user")
     assert command[command.index("--artifact-root") + 1] == "/models/releases"
     assert command[command.index("--min-auc") + 1] == "0.5"
     assert command[command.index("--model-type") + 1] == "fm"
     assert command[command.index("--factor-dim") + 1] == "16"
+    assert command[command.index("--user-label-window-days") + 1] == "14"
 
 
 @pytest.mark.parametrize("payload", [
     {"date": "2026-08-21", "model_type": "deepfm"},
     {"date": "2026-08-21", "model_type": "fm", "factor_dim": 0},
+    {"date": "2026-08-21", "target_type": "user", "user_label_window_days": 31},
 ])
 def test_rank_command_rejects_invalid_model_options(payload):
     with pytest.raises(ValueError):

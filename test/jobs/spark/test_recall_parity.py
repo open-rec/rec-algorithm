@@ -13,7 +13,7 @@ from algorithm.recall.item_cf_i2i import ItemBasedI2I
 from algorithm.recall.user_cf_u2i import UserBasedCF
 from jobs.spark.recall import content_i2i, hot, item_cf_i2i, user_cf_u2i
 from jobs.spark.io import read_items, read_users
-from jobs.spark.rank_job import _freeze_feature_history
+from jobs.spark.rank_job import _freeze_feature_history, _user_pair_events
 
 
 @pytest.fixture(scope="module")
@@ -84,6 +84,25 @@ def test_feature_history_is_strictly_before_every_label(spark):
 
     assert cutoff == 100
     assert [(row.id, row.time) for row in history.collect()] == [("past", 99)]
+
+
+def test_user_pair_labels_are_balanced_and_keep_source_label_time(spark):
+    source = spark.createDataFrame([
+        ("home", "u1", "a", 10, "click"),
+        ("home", "u2", "a", 11, "collect"),
+        ("home", "u3", "c", 30, "click"),
+    ], ["scene", "user_id", "item_id", "time", "type"])
+    users = spark.createDataFrame([("u1",), ("u2",), ("u3",), ("inactive",)], ["id"])
+
+    labels = _user_pair_events(source, users, max_events=20).collect()
+
+    positives = [row for row in labels if row.type == "click"]
+    negatives = [row for row in labels if row.type == "expose"]
+    assert len(positives) == len(negatives) == 2
+    assert {(row.user_id, row.item_id) for row in positives} == {("u1", "u2"), ("u2", "u1")}
+    assert {row.item_id for row in negatives} == {"u3"}
+    assert {row.time for row in negatives} == {11}
+    assert all("inactive" not in (row.user_id, row.item_id) for row in labels)
 
 
 def test_entity_snapshots_respect_second_cutoff_and_millisecond_mutations(spark, tmp_path):
