@@ -16,7 +16,7 @@ SERVING_TABLES = {
     "hot": "hot", "new": "new", "item_cf_i2i": "item-cf-i2i",
     "content_i2i": "content-i2i", "user_cf_u2i": "user-cf-u2i",
     "user_cf_u2u": "user-cf-u2u", "content_u2u": "content-u2u",
-    "user_emb_u2u": "user-emb-u2u",
+    "user_emb_u2u": "user-als-emb",
 }
 
 
