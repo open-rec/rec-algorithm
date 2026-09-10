@@ -160,7 +160,7 @@ class LRRecModel(RecModel):
                  target_type="item"):
         """
         Artifacts are filed per scene in the shared model store — `model/rank/{scene}/lr.pth` and
-        `model/feature/{scene}/lr.features.json` — so a trained model survives across runs and does
+        `model/rank/{scene}/lr.features.json` — so a trained model survives across runs and does
         not collide with the pre-trained Douban checkpoint at the root of `model/rank`.
 
         The feature space is kept out of the .pth deliberately: the rank engine loads that file with

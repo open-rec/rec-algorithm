@@ -6,7 +6,6 @@ current_path = Path(__file__).resolve()
 MODEL_HOME_ENV = "OPENREC_MODEL_HOME"
 
 RANK_DIR = "rank"
-FEATURE_DIR = "feature"
 
 # the namespace trained artifacts are filed under, keeping them clear of the pre-trained Douban
 # checkpoint that sits at the root of model/rank
@@ -53,30 +52,19 @@ def rank_model_path(scene=DEFAULT_SCENE):
 
 
 def feature_path(scene=DEFAULT_SCENE):
-    """`model/feature/{scene}`, created on demand."""
-    path = model_home() / FEATURE_DIR / scene
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    """The self-contained `model/rank/{scene}` release directory."""
+    return rank_model_path(scene)
 
 
 def feature_file_candidates(model_file):
     """
     Where the feature space belonging to `model_file` might live, best guess first.
 
-    Checkpoints and feature spaces are stored in parallel trees (`model/rank/{scene}/lr.pth` beside
-    `model/feature/{scene}/lr.features.json`), so the sidecar is not simply next to the checkpoint.
-    Both layouts are offered: same-directory first, then the mirrored `rank/` -> `feature/` path.
+    Checkpoints and fitted feature spaces are stored in the same self-contained rank directory.
     """
     model_file = Path(model_file)
     sidecar = model_file.with_suffix(".features.json")
-    candidates = [sidecar]
-
-    parts = list(model_file.parts)
-    if RANK_DIR in parts:
-        # rightmost `rank` component, so a path that happens to contain the word earlier is safe
-        index = len(parts) - 1 - parts[::-1].index(RANK_DIR)
-        candidates.append(Path(*parts[:index], FEATURE_DIR, *parts[index + 1:-1], sidecar.name))
-    return candidates
+    return [sidecar]
 
 
 def resolve_feature_file(model_file):

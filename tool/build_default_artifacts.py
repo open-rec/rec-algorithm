@@ -19,12 +19,12 @@ from tool.gen_recall_data import generate as generate_recall
 
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 5
+BUILD_VERSION = 6
 REQUIRED = (
-    "feature/item/user_feature.csv", "feature/item/item_feature.csv",
-    "feature/item/lr.features.json", "feature/item/fm.features.json",
-    "feature/user/user_feature.csv", "feature/user/lr.features.json",
-    "feature/user/fm.features.json", "rank/item/lr.pth", "rank/item/fm.pth",
+    "rank/item/user_feature.csv", "rank/item/item_feature.csv",
+    "rank/item/lr.features.json", "rank/item/fm.features.json",
+    "rank/user/user_feature.csv", "rank/user/lr.features.json",
+    "rank/user/fm.features.json", "rank/item/lr.pth", "rank/item/fm.pth",
     "rank/item/lr.manifest.json", "rank/item/fm.manifest.json",
     "rank/user/lr.pth", "rank/user/fm.pth",
     "rank/user/lr.manifest.json", "rank/user/fm.manifest.json",
@@ -64,7 +64,7 @@ def reusable(model_root, inputs):
 def _train(model_class, model_type, users, candidates, feature_events, labels, cutoff, stage,
            epochs, factor_dim, min_auc, target_type="item"):
     model_file = stage / "rank" / target_type / (model_type + ".pth")
-    feature_file = stage / "feature" / target_type / (model_type + ".features.json")
+    feature_file = stage / "rank" / target_type / (model_type + ".features.json")
     kwargs = {"factor_dim": factor_dim} if model_type == "fm" else {}
     candidate_features = (ItemFeature(candidates, feature_events, cutoff) if target_type == "item"
                           else UserFeature(candidates, feature_events, cutoff))
@@ -131,7 +131,7 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
     model_root.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".default-build-", dir=str(model_root)))
     try:
-        for relative in ("feature/item", "feature/user", "rank/item", "rank/user", "recall"):
+        for relative in ("rank/item", "rank/user", "recall"):
             (stage / relative).mkdir(parents=True)
         users = pd.read_csv(data_dir / "user.csv")
         items = pd.read_csv(data_dir / "item.csv")
@@ -147,9 +147,9 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
         item_snapshot = ItemFeature(items, feature_events, cutoff).items.copy()
         user_snapshot.insert(1, "as_of_time", cutoff)
         item_snapshot.insert(1, "as_of_time", cutoff)
-        user_snapshot.to_csv(stage / "feature/item/user_feature.csv", index=False)
-        item_snapshot.to_csv(stage / "feature/item/item_feature.csv", index=False)
-        user_snapshot.to_csv(stage / "feature/user/user_feature.csv", index=False)
+        user_snapshot.to_csv(stage / "rank/item/user_feature.csv", index=False)
+        item_snapshot.to_csv(stage / "rank/item/item_feature.csv", index=False)
+        user_snapshot.to_csv(stage / "rank/user/user_feature.csv", index=False)
         _train(LRRecModel, "lr", users, items, feature_events, labels, cutoff, stage,
                epochs, factor_dim, min_auc, "item")
         _train(FMRecModel, "fm", users, items, feature_events, labels, cutoff, stage,
