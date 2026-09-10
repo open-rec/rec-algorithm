@@ -268,8 +268,9 @@ so `FeatureSpace` is saved beside every checkpoint and must be loaded by `rank-e
 
 ### feature catalog and model feature sets
 
-`algorithm/feature/definitions/feature.catalog.json` is the global descriptive catalog for every
-entity and behavioural feature OpenRec currently produces. `lr.feature-set.json` and
+`algorithm/feature/definitions/feature.catalog.json` is a generated, package-local copy of the
+global catalog owned by `model/feature/catalog/feature.catalog.json`; do not edit it directly. It
+contains every entity and behavioural feature OpenRec currently produces. `lr.feature-set.json` and
 `fm.feature-set.json` independently select the catalog entries each model family trains on. The
 catalog and sets are training-time governance inputs only: they validate names, ownership, kinds,
 and the data-processor event-feature contract.
@@ -277,10 +278,10 @@ and the data-processor event-feature contract.
 Training fits the selected set against that version's data and writes a self-contained
 `lr.features.json` or `fm.features.json` beside the checkpoint. This fitted sidecar includes the
 ordered columns, category vocabularies, numeric normalization statistics, catalog/set provenance,
-and computed widths. Deployment never rereads the catalog or feature-set files; rank-engine uses
-only the immutable checkpoint and its fitted sidecar. Consequently an updated catalog cannot alter
-an already published model, and LR/FM may evolve their selections independently even when their
-current v1 sets contain the same features.
+and computed widths. Deployment validates the fitted sidecar's catalog version and SHA-256 against
+the catalog packaged in the rec-algorithm wheel, then uses the immutable checkpoint and sidecar.
+Consequently a mismatched catalog cannot silently alter an already published model, and LR/FM may
+evolve their selections independently even when their current v1 sets contain the same features.
 
 ### materialize online features
 

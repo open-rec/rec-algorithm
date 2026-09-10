@@ -6,6 +6,7 @@ statistics remain in the model-specific ``*.features.json`` written beside each 
 """
 
 import json
+import hashlib
 from pathlib import Path
 
 
@@ -21,13 +22,24 @@ class FeatureCatalog(object):
 
     def __init__(self, payload):
         self.payload = payload
-        self.version = int(payload["version"])
-        self.features = dict(payload["features"])
+        self.version = int(payload["catalog_version"])
+        self.features = {item["id"]: self._runtime_definition(item)
+                         for item in payload["features"]}
+        self.sha256 = None
+
+    @staticmethod
+    def _runtime_definition(item):
+        kind = {"categorical": "id", "multi_value": "multi"}.get(item["shape"])
+        if kind is None:
+            kind = "bool" if item["value_type"] == "boolean" else "num"
+        return dict(item, column=item["name"], kind=kind)
 
     @classmethod
     def load(cls, path=CATALOG_FILE):
-        with open(path) as stream:
-            return cls(json.load(stream))
+        raw = Path(path).read_bytes()
+        catalog = cls(json.loads(raw.decode("utf-8")))
+        catalog.sha256 = hashlib.sha256(raw).hexdigest()
+        return catalog
 
     def require(self, feature_id, entity=None):
         feature = self.features.get(feature_id)
@@ -48,6 +60,7 @@ class ModelFeatureSet(object):
         self.catalog_version = int(payload["catalog_version"])
         if self.catalog_version != catalog.version:
             raise ValueError("feature set catalog version does not match the loaded catalog")
+        self.catalog_sha256 = catalog.sha256
         self.user = self._resolve(payload.get("user", []), "user", catalog)
         self.item = self._resolve(payload.get("item", []), "item", catalog)
 

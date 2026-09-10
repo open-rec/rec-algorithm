@@ -7,10 +7,25 @@ feature table and copied to Redis without requiring rank-engine to read the even
 import numpy as np
 import pandas as pd
 
+from algorithm.feature.feature_catalog import FeatureCatalog
 
-DEFAULT_EVENT_TYPES = ("click", "expose", "buy", "collect", "stay")
-WINDOW_DAYS = (1, 7, 30)
+
 DAY_SECONDS = 24 * 60 * 60
+
+
+def _behavior_contract():
+    catalog = FeatureCatalog.load()
+    definitions = [value for value in catalog.features.values()
+                   if value.get("entity") == "user" and value.get("group") == "behavior"]
+    windows = sorted({int(value["aggregation"]["window_seconds"] / DAY_SECONDS)
+                      for value in definitions
+                      if value.get("aggregation", {}).get("window_seconds")})
+    event_types = [value["aggregation"]["filter"]["type"] for value in definitions
+                   if value.get("aggregation", {}).get("filter")]
+    return tuple(event_types), tuple(windows)
+
+
+DEFAULT_EVENT_TYPES, WINDOW_DAYS = _behavior_contract()
 
 
 def event_feature_columns(counterpart_name, event_types=DEFAULT_EVENT_TYPES):
@@ -43,7 +58,8 @@ def aggregate_event_features(events, entity="user", as_of_time=None,
     frame = events.copy()
     raw_time = frame["time"] if "time" in frame else pd.Series(np.nan, index=frame.index)
     frame["time"] = pd.to_numeric(raw_time, errors="coerce")
-    frame = frame[frame[key].notna() & frame["time"].notna()].copy()
+    integral_time = np.isfinite(frame["time"]) & (frame["time"] == np.floor(frame["time"]))
+    frame = frame[frame[key].notna() & frame["time"].notna() & integral_time].copy()
     if frame.empty:
         return pd.DataFrame(columns=columns)
     snapshot = float(frame["time"].max()) if as_of_time is None else float(as_of_time)
@@ -51,10 +67,20 @@ def aggregate_event_features(events, entity="user", as_of_time=None,
     if frame.empty:
         return pd.DataFrame(columns=columns)
 
+    trace = frame.get("trace_id", pd.Series("", index=frame.index)).fillna("").astype(str)
+    fallback = (frame.get("user_id", pd.Series("", index=frame.index)).astype(str) + "\x1f" +
+                frame.get("item_id", pd.Series("", index=frame.index)).astype(str) + "\x1f" +
+                frame.get("scene", pd.Series("", index=frame.index)).fillna("").astype(str) + "\x1f" +
+                frame.get("type", pd.Series("", index=frame.index)).fillna("").astype(str) + "\x1f" +
+                frame["time"].astype("int64").astype(str))
+    frame["_event_identity"] = np.where(trace.str.strip().ne(""), "trace:" + trace,
+                                         "fields:" + fallback)
+    frame = frame.drop_duplicates("_event_identity", keep="first")
     raw_value = frame["value"] if "value" in frame else pd.Series(0.0, index=frame.index)
     frame["value_num"] = pd.to_numeric(raw_value, errors="coerce").fillna(0.0)
     if "scene" not in frame:
         frame["scene"] = ""
+    frame["scene"] = frame["scene"].fillna("").astype(str).str.strip().replace("", np.nan)
     frame["event_day"] = np.floor(frame["time"] / DAY_SECONDS)
     grouped = frame.groupby(key, sort=False)
     result = grouped.agg(

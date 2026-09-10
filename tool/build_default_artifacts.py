@@ -19,7 +19,7 @@ from tool.gen_recall_data import generate as generate_recall
 
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 6
+BUILD_VERSION = 7
 REQUIRED = (
     "rank/item/user_feature.csv", "rank/item/item_feature.csv",
     "rank/item/lr.features.json", "rank/item/fm.features.json",
@@ -88,6 +88,7 @@ def _train(model_class, model_type, users, candidates, feature_events, labels, c
         "created_at": datetime.now(timezone.utc).isoformat(), "status": "evaluated",
         "feature_cutoff_time": cutoff, "model": model_file.name, "feature": feature_file.name,
         "feature_set": feature_space.feature_set, "catalog_version": feature_space.catalog_version,
+        "catalog_sha256": feature_space.catalog_sha256,
         "feature_sha256": sha256(feature_file), "input_dim": model.model.dim,
         "metrics": {"auc": auc, "positive_rate": model.dataset.positive_rate,
                     "samples": len(model.dataset), "feature_dim": model.model.dim,

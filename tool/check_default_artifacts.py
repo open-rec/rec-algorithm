@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 6
+BUILD_VERSION = 7
 REQUIRED = (
     "rank/item/user_feature.csv", "rank/item/item_feature.csv",
     "rank/item/lr.features.json", "rank/item/fm.features.json",

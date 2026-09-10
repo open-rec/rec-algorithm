@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pandas as pd
 
 from algorithm.feature.event_feature import aggregate_event_features, enrich_entity_features
@@ -33,3 +36,24 @@ def test_item_event_aggregation_and_zero_fill_for_unseen_entity():
     assert enriched.loc["i1", "event_unique_user_count"] == 2
     assert enriched.loc["never-seen", "event_count"] == 0
     assert enriched.loc["never-seen", "event_click_rate"] == 0
+
+
+def test_event_identity_deduplicates_and_empty_scene_is_missing():
+    events = pd.DataFrame([
+        {"trace_id": "same", "user_id": "u", "item_id": "i", "scene": " ",
+         "type": "click", "value": 2, "time": 100},
+        {"trace_id": "same", "user_id": "u", "item_id": "i", "scene": "ignored",
+         "type": "click", "value": 2, "time": 100},
+    ])
+    row = aggregate_event_features(events, "user", 200).iloc[0]
+    assert row.event_count == 1
+    assert row.event_unique_scene_count == 0
+
+
+def test_shared_java_python_golden_fixture():
+    path = Path(__file__).parents[3] / "algorithm/feature/definitions/event-feature-parity.json"
+    fixture = json.loads(path.read_text())
+    row = aggregate_event_features(pd.DataFrame(fixture["events"]), "user",
+                                   fixture["as_of_time"]).iloc[0]
+    for name, expected in fixture["expected_user"].items():
+        assert row[name] == expected
