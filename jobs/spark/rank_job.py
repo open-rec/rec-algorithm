@@ -136,6 +136,7 @@ def run(args, spark=None):
     active_events = events
     if args.target_type == "user":
         active_events = _user_pair_events(label_window, users, args.max_events)
+    constructed_label_count = active_events.count()
     label_bounds = active_events.agg(F.min("time"), F.max("time")).first()
     feature_cutoff_time, feature_until_time = label_bounds[0], label_bounds[1]
     if feature_cutoff_time is None or feature_until_time is None:
@@ -179,6 +180,7 @@ def run(args, spark=None):
                               "factor_dim": args.factor_dim,
                               "label_observation_cutoff": label_observation_cutoff,
                               "input_label_count": input_label_count,
+                              "constructed_label_count": constructed_label_count,
                               "materialized_label_count": materialized_count,
                               "history_row_count": history_rows,
                               "materialization_seconds": elapsed,
