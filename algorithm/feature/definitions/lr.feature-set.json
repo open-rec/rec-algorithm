@@ -1,7 +1,7 @@
 {
   "name": "ranking-lr-v1",
   "model_type": "lr",
-  "catalog_version": 1,
+  "catalog_version": 2,
   "user": [
     "user.country", "user.city", "user.gender", "user.age", "user.tags",
     "user.event_count", "user.event_value_sum", "user.event_value_mean",

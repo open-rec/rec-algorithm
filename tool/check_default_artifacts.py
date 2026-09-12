@@ -5,8 +5,10 @@ import hashlib
 import json
 from pathlib import Path
 
+from algorithm.feature.feature_catalog import FeatureCatalog
+
 SCHEMA_VERSION = 1
-BUILD_VERSION = 7
+BUILD_VERSION = 9
 REQUIRED = (
     "rank/item/user_feature.csv", "rank/item/item_feature.csv",
     "rank/item/lr.features.json", "rank/item/fm.features.json",
@@ -35,11 +37,14 @@ def valid(data_dir, model_root):
         return False
     try:
         manifest = json.loads(path.read_text())
+        catalog = FeatureCatalog.load()
         inputs = {name: sha256(data_dir / name)
                   for name in ("user.csv", "item.csv", "event.csv")}
         return (manifest.get("schema_version") == SCHEMA_VERSION
                 and manifest.get("build_version") == BUILD_VERSION
                 and manifest.get("inputs") == inputs
+                and manifest.get("catalog_version") == catalog.version
+                and manifest.get("catalog_sha256") == catalog.sha256
                 and set(manifest.get("outputs", {})) == set(REQUIRED)
                 and all(sha256(model_root / name) == digest
                         for name, digest in manifest["outputs"].items()))

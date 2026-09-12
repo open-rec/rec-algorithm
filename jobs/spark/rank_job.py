@@ -111,21 +111,27 @@ def run(args, spark=None):
     events = label_window.filter(F.col("type").isin("click", "expose")) \
         .orderBy(F.desc("time")).limit(args.max_events)
 
-    # One frozen, strictly-prior snapshot is shared by all samples in this training run. This is a
-    # deliberately conservative point-in-time contract: neither a label event itself nor any later
-    # train/validation event can enter its behavioural features.
-    # The current entity history predates point-in-time snapshots: fixture/client event timestamps
-    # can be earlier than the corresponding entity mutation. Keep the latest profile snapshot for
-    # compatibility, while behavioural aggregates below remain strictly prior to every label.
-    # Once entity CDC history is complete, these reads can also use feature_cutoff_time.
-    items = read_items(spark, date=args.date, cumulative=True, path=args.item_path) \
+    # Freeze every feature source at one auditable instant strictly before the first label. This is
+    # conservative (all samples share a snapshot) but prevents profile mutations later in the day
+    # from leaking into earlier labels. Per-sample temporal joins can build on this contract later.
+    provisional_cutoff = events.agg(F.min("time").alias("cutoff")).first()["cutoff"]
+    if provisional_cutoff is None:
+        raise ValueError("rank training data has no labelled events")
+    items = read_items(spark, date=args.date, cumulative=True, path=args.item_path,
+                       as_of_time=provisional_cutoff) \
         .filter(F.col("scene") == args.scene)
-    users = read_users(spark, date=args.date, cumulative=True, path=args.user_path)
+    users = read_users(spark, date=args.date, cumulative=True, path=args.user_path,
+                       as_of_time=provisional_cutoff)
     active_events = events.join(items.select(F.col("id").alias("active_item")),
                                 events.item_id == F.col("active_item"), "left_semi")
     if args.target_type == "user":
         active_events = _user_pair_events(label_window, users, args.max_events)
     feature_events, feature_cutoff_time = _freeze_feature_history(all_events, active_events)
+    if feature_cutoff_time != provisional_cutoff:
+        items = read_items(spark, date=args.date, cumulative=True, path=args.item_path,
+                           as_of_time=feature_cutoff_time).filter(F.col("scene") == args.scene)
+        users = read_users(spark, date=args.date, cumulative=True, path=args.user_path,
+                           as_of_time=feature_cutoff_time)
     event_frame, feature_event_frame, item_frame, user_frame = (
         active_events.toPandas(), feature_events.toPandas(), items.toPandas(), users.toPandas())
     if event_frame.empty or user_frame.empty or (args.target_type == "item" and item_frame.empty):

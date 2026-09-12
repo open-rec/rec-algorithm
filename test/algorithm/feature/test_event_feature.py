@@ -40,14 +40,27 @@ def test_item_event_aggregation_and_zero_fill_for_unseen_entity():
 
 def test_event_identity_deduplicates_and_empty_scene_is_missing():
     events = pd.DataFrame([
-        {"trace_id": "same", "user_id": "u", "item_id": "i", "scene": " ",
+        {"event_id": "same", "trace_id": "request", "user_id": "u", "item_id": "i", "scene": " ",
          "type": "click", "value": 2, "time": 100},
-        {"trace_id": "same", "user_id": "u", "item_id": "i", "scene": "ignored",
+        {"event_id": "same", "trace_id": "request", "user_id": "u", "item_id": "i", "scene": "ignored",
          "type": "click", "value": 2, "time": 100},
     ])
     row = aggregate_event_features(events, "user", 200).iloc[0]
     assert row.event_count == 1
     assert row.event_unique_scene_count == 0
+
+
+def test_trace_context_keeps_distinct_expose_and_click_actions():
+    events = pd.DataFrame([
+        {"trace_id": "request-1", "user_id": "u", "item_id": "i", "scene": "s",
+         "type": "expose", "value": 0, "time": 100},
+        {"trace_id": "request-1", "user_id": "u", "item_id": "i", "scene": "s",
+         "type": "click", "value": 1, "time": 101},
+    ])
+    row = aggregate_event_features(events, "user", 200).iloc[0]
+    assert row.event_count == 2
+    assert row.event_expose_count == 1
+    assert row.event_click_count == 1
 
 
 def test_shared_java_python_golden_fixture():

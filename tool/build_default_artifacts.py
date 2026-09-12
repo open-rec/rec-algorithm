@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from algorithm.feature.item_feature import ItemFeature
+from algorithm.feature.feature_catalog import FeatureCatalog
 from algorithm.feature.user_feature import UserFeature
 from algorithm.rank.fm import FMRecModel
 from algorithm.rank.lr import LRRecModel
@@ -19,7 +20,7 @@ from tool.gen_recall_data import generate as generate_recall
 
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 7
+BUILD_VERSION = 9
 REQUIRED = (
     "rank/item/user_feature.csv", "rank/item/item_feature.csv",
     "rank/item/lr.features.json", "rank/item/fm.features.json",
@@ -31,6 +32,7 @@ REQUIRED = (
     "recall/item_cf_i2i.csv", "recall/content_i2i.csv", "recall/user_cf_u2i.csv",
     "recall/hot.csv", "recall/new.csv", "recall/item_seq_emb.csv",
 )
+RECALL_REQUIRED = tuple(name for name in REQUIRED if name.startswith("recall/"))
 
 
 def sha256(path):
@@ -45,16 +47,36 @@ def input_hashes(data_dir):
     return {name: sha256(Path(data_dir) / name) for name in ("user.csv", "item.csv", "event.csv")}
 
 
-def reusable(model_root, inputs):
+def catalog_provenance():
+    catalog = FeatureCatalog.load()
+    return {"catalog_version": catalog.version, "catalog_sha256": catalog.sha256}
+
+
+def reusable(model_root, inputs, catalog=None):
     root = Path(model_root)
+    catalog = catalog or catalog_provenance()
     manifest_path = root / "default.manifest.json"
     if not manifest_path.is_file() or any(not (root / name).is_file() for name in REQUIRED):
+        return False
+
+
+def reusable_recall(model_root, inputs):
+    """Recall does not depend on the rank feature catalog; preserve it when raw data is unchanged."""
+    root = Path(model_root)
+    try:
+        manifest = json.loads((root / "default.manifest.json").read_text())
+        outputs = manifest.get("outputs", {})
+        return (manifest.get("inputs") == inputs
+                and all((root / name).is_file() and outputs.get(name) == sha256(root / name)
+                        for name in RECALL_REQUIRED))
+    except (OSError, ValueError):
         return False
     try:
         manifest = json.loads(manifest_path.read_text())
         return (manifest.get("schema_version") == SCHEMA_VERSION
                 and manifest.get("build_version") == BUILD_VERSION
                 and manifest.get("inputs") == inputs
+                and all(manifest.get(name) == value for name, value in catalog.items())
                 and all(sha256(root / name) == digest
                         for name, digest in manifest.get("outputs", {}).items()))
     except (OSError, ValueError):
@@ -127,7 +149,8 @@ def _user_pair_labels(events, users):
 def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False):
     data_dir, model_root = Path(data_dir).resolve(), Path(model_root).resolve()
     inputs = input_hashes(data_dir)
-    if not force and reusable(model_root, inputs):
+    catalog = catalog_provenance()
+    if not force and reusable(model_root, inputs, catalog):
         return {"status": "reused", "model_root": str(model_root), "inputs": inputs}
     model_root.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".default-build-", dir=str(model_root)))
@@ -160,13 +183,18 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
                epochs, factor_dim, 0.0, "user")
         _train(FMRecModel, "fm", users, users, feature_events, user_labels, cutoff, stage,
                epochs, factor_dim, 0.0, "user")
-        generate_recall(data_dir / "item.csv", data_dir / "event.csv", stage / "recall")
+        if reusable_recall(model_root, inputs):
+            for name in RECALL_REQUIRED:
+                shutil.copy2(model_root / name, stage / name)
+        else:
+            generate_recall(data_dir / "item.csv", data_dir / "event.csv", stage / "recall")
 
         outputs = {name: sha256(stage / name) for name in REQUIRED}
         manifest = {"schema_version": SCHEMA_VERSION, "build_version": BUILD_VERSION,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "source": "rec-algorithm/tool/build_default_artifacts.py",
-                    "feature_cutoff_time": cutoff, "inputs": inputs, "outputs": outputs}
+                    "feature_cutoff_time": cutoff, "inputs": inputs, "outputs": outputs,
+                    **catalog}
         for name in REQUIRED:
             target = model_root / name
             target.parent.mkdir(parents=True, exist_ok=True)

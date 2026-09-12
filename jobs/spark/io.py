@@ -7,7 +7,7 @@ from pyspark.sql import Window
 
 
 EVENT_FIELDS = {
-    "id": "string", "user_id": "string", "item_id": "string", "trace_id": "string",
+    "id": "string", "event_id": "string", "user_id": "string", "item_id": "string", "trace_id": "string",
     "scene": "string", "type": "string", "value": "string", "time": "long",
     "ext_fields": "string",
 }
@@ -23,7 +23,7 @@ USER_FIELDS = {
 }
 
 JSON_NAMES = {
-    "user_id": "userId", "item_id": "itemId", "trace_id": "traceId",
+    "event_id": "eventId", "user_id": "userId", "item_id": "itemId", "trace_id": "traceId",
     "pub_time": "pubTime", "modify_time": "modifyTime", "expire_time": "expireTime",
     "device_id": "deviceId", "register_time": "registerTime", "login_time": "loginTime",
     "ext_fields": "extFields",
@@ -105,10 +105,15 @@ def read_events(spark, table="openrec.event_entity", date=None, cumulative=False
         return frame
     fallback = F.sha2(F.concat_ws("|", "user_id", "item_id", "scene", "type",
                                   F.col("time").cast("string")), 256)
-    keyed = frame.withColumn("_event_key", F.coalesce("trace_id", "id", fallback))
+    stable_event_id = F.when(F.length(F.trim(F.col("event_id"))) > 0, F.col("event_id"))
+    traced = F.when(F.length(F.trim(F.col("trace_id"))) > 0, F.concat_ws(
+        "|", "user_id", "item_id", "scene", "type", F.col("time").cast("string"),
+        "trace_id"))
+    keyed = frame.withColumn("_event_key", F.coalesce(stable_event_id, traced, "id", fallback))
     window = Window.partitionBy("_event_key").orderBy(
         F.desc("_mutation_time"), F.desc("time"), F.desc("dt"))
-    return keyed.withColumn("_row", F.row_number().over(window)).filter("_row = 1") \
+    return keyed.withColumn("_row", F.row_number().over(window)).filter(
+        "_row = 1 AND _operation <> 'DELETE'") \
         .drop("_event_key", "_row", "dt", "_operation", "_mutation_time")
 
 

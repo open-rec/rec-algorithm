@@ -67,13 +67,14 @@ def aggregate_event_features(events, entity="user", as_of_time=None,
     if frame.empty:
         return pd.DataFrame(columns=columns)
 
+    event_id = frame.get("event_id", pd.Series("", index=frame.index)).fillna("").astype(str)
     trace = frame.get("trace_id", pd.Series("", index=frame.index)).fillna("").astype(str)
     fallback = (frame.get("user_id", pd.Series("", index=frame.index)).astype(str) + "\x1f" +
                 frame.get("item_id", pd.Series("", index=frame.index)).astype(str) + "\x1f" +
                 frame.get("scene", pd.Series("", index=frame.index)).fillna("").astype(str) + "\x1f" +
                 frame.get("type", pd.Series("", index=frame.index)).fillna("").astype(str) + "\x1f" +
-                frame["time"].astype("int64").astype(str))
-    frame["_event_identity"] = np.where(trace.str.strip().ne(""), "trace:" + trace,
+                frame["time"].astype("int64").astype(str) + "\x1f" + trace)
+    frame["_event_identity"] = np.where(event_id.str.strip().ne(""), "event:" + event_id,
                                          "fields:" + fallback)
     frame = frame.drop_duplicates("_event_identity", keep="first")
     raw_value = frame["value"] if "value" in frame else pd.Series(0.0, index=frame.index)
