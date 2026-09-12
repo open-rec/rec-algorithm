@@ -32,7 +32,8 @@ class EventDataSet(Dataset):
     """
 
     def __init__(self, user_feature: UserFeature = None, item_feature: ItemFeature = None,
-                 events: DataFrame = None, feature_space: FeatureSpace = None):
+                 events: DataFrame = None, feature_space: FeatureSpace = None,
+                 sample_users: DataFrame = None, sample_items: DataFrame = None):
         self.user_feature = user_feature
         self.item_feature = item_feature
         self.raw_events = events
@@ -42,6 +43,8 @@ class EventDataSet(Dataset):
         self.item_feature_map = None
         self.labels = None
         self.dim = 1
+        self.sample_users = sample_users
+        self.sample_items = sample_items
         self.preprocess(feature_space)
 
     @property
@@ -57,7 +60,9 @@ class EventDataSet(Dataset):
         candidate_frame = (self.item_feature.items if hasattr(self.item_feature, "items")
                            else self.item_feature.users)
         if not space.fitted:
-            space.fit(users=self.user_feature.users, items=candidate_frame)
+            fit_users = self.sample_users if self.sample_users is not None else self.user_feature.users
+            fit_items = self.sample_items if self.sample_items is not None else candidate_frame
+            space.fit(users=fit_users, items=fit_items)
         self._bind(space)
 
         # Keep only labelled events whose user and item we can actually encode. This used to be an
@@ -68,6 +73,8 @@ class EventDataSet(Dataset):
         # negative label, but only trace_id can identify that pair reliably. Without it, repeated
         # events for the same user and item must remain independent training observations.
         labelled = events[events["type"].isin(LABELLED_EVENTS)].copy()
+        labelled["_sample_position"] = np.arange(len(labelled))
+        raw_label_count = len(labelled)
         has_trace_id = ("trace_id" in labelled.columns
                         and labelled["trace_id"].fillna("").astype(str).ne("").any())
         if has_trace_id:
@@ -96,6 +103,20 @@ class EventDataSet(Dataset):
         self._user_ids = self.events["user_id"].to_numpy()
         self._item_ids = self.events["item_id"].to_numpy()
         self._label_values = self.labels.to_numpy()
+        self._sample_user_values = None
+        self._sample_item_values = None
+        if self.sample_users is not None or self.sample_items is not None:
+            if self.sample_users is None or self.sample_items is None:
+                raise ValueError("point-in-time training requires both aligned sample frames")
+            positions = self.events["_sample_position"].to_numpy()
+            if (len(self.sample_users) != raw_label_count
+                    or len(self.sample_items) != raw_label_count):
+                raise ValueError("point-in-time feature rows must align with labelled events")
+            aligned_users = self.sample_users.iloc[positions].reset_index(drop=True)
+            aligned_items = self.sample_items.iloc[positions].reset_index(drop=True)
+            self._bind(space)
+            self._sample_user_values = space.transform_users(aligned_users).astype(np.float32)
+            self._sample_item_values = space.transform_items(aligned_items).astype(np.float32)
 
     def _bind(self, space):
         candidate_frame = (self.item_feature.items if hasattr(self.item_feature, "items")
@@ -115,8 +136,10 @@ class EventDataSet(Dataset):
         return len(self.events)
 
     def __getitem__(self, idx):
-        user_feature = torch.from_numpy(self.user_feature_map[self._user_ids[idx]])
-        item_feature = torch.from_numpy(self.item_feature_map[self._item_ids[idx]])
+        user_feature = torch.from_numpy(self._sample_user_values[idx] if self._sample_user_values is not None
+                                        else self.user_feature_map[self._user_ids[idx]])
+        item_feature = torch.from_numpy(self._sample_item_values[idx] if self._sample_item_values is not None
+                                        else self.item_feature_map[self._item_ids[idx]])
         label = torch.tensor(self._label_values[idx], dtype=torch.float32)
         return user_feature, item_feature, label
 
@@ -157,7 +180,7 @@ class LRRecModel(RecModel):
 
     def __init__(self, user_feature=None, item_feature=None, events=None, feature_space=None,
                  scene=DEFAULT_SCENE, model_file=None, feature_file=None, model_type="lr",
-                 target_type="item"):
+                 target_type="item", sample_users=None, sample_items=None):
         """
         Artifacts are filed per scene in the shared model store — `model/rank/{scene}/lr.pth` and
         `model/rank/{scene}/lr.features.json` — so a trained model survives across runs and does
@@ -180,7 +203,8 @@ class LRRecModel(RecModel):
             feature_space = FeatureSpace.for_model(model_type, target_type)
 
         self.dataset = EventDataSet(user_feature=user_feature, item_feature=item_feature,
-                                    events=events, feature_space=feature_space)
+                                    events=events, feature_space=feature_space,
+                                    sample_users=sample_users, sample_items=sample_items)
         self.model = LRModel(dim=self.dataset.feature_dim)
 
     def exists(self):

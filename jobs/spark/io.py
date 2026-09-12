@@ -117,6 +117,17 @@ def read_events(spark, table="openrec.event_entity", date=None, cumulative=False
         .drop("_event_key", "_row", "dt", "_operation", "_mutation_time")
 
 
+def read_event_history(spark, table="openrec.event_entity", date=None, path=None,
+                       until_time=None):
+    """Return event mutation history for label-time last-write-wins resolution."""
+    frame = read_entity(spark, table, EVENT_FIELDS, date, True, True, path)
+    effective = F.when(F.col("_mutation_time") > 0, _epoch_seconds("_mutation_time")) \
+        .otherwise(F.coalesce("time", F.lit(0)))
+    frame = frame.withColumn("_effective_time", effective)
+    return frame.filter(F.col("_effective_time") <= F.lit(until_time)) \
+        if until_time is not None else frame
+
+
 def read_items(spark, table="openrec.item_entity", date=None, cumulative=False, path=None,
                as_of_time=None):
     frame = read_entity(spark, table, ITEM_FIELDS, date, cumulative, cumulative, path)
@@ -135,6 +146,17 @@ def read_items(spark, table="openrec.item_entity", date=None, cumulative=False, 
     return frame.withColumn("_row", F.row_number().over(window)).filter(
         "_row = 1 AND _operation <> 'DELETE'").drop(
         "_row", "dt", "_operation", "_mutation_time")
+
+
+def read_item_history(spark, table="openrec.item_entity", date=None, path=None,
+                      until_time=None):
+    """Return mutation history with normalized effective time for per-label as-of selection."""
+    frame = read_entity(spark, table, ITEM_FIELDS, date, True, True, path)
+    effective = F.when(F.col("_mutation_time") > 0, _epoch_seconds("_mutation_time")) \
+        .otherwise(F.coalesce("modify_time", "pub_time", F.lit(0)))
+    frame = frame.withColumn("_effective_time", effective)
+    return frame.filter(F.col("_effective_time") <= F.lit(until_time)) \
+        if until_time is not None else frame
 
 
 def keep_active_item_events(events, items):
@@ -159,6 +181,17 @@ def read_users(spark, table="openrec.user_entity", date=None, cumulative=False, 
     return frame.withColumn("_row", F.row_number().over(window)).filter(
         "_row = 1 AND _operation <> 'DELETE'").drop(
             "_row", "dt", "_operation", "_mutation_time")
+
+
+def read_user_history(spark, table="openrec.user_entity", date=None, path=None,
+                      until_time=None):
+    """Return mutation history with normalized effective time for per-label as-of selection."""
+    frame = read_entity(spark, table, USER_FIELDS, date, True, True, path)
+    effective = F.when(F.col("_mutation_time") > 0, _epoch_seconds("_mutation_time")) \
+        .otherwise(F.coalesce("login_time", "register_time", F.lit(0)))
+    frame = frame.withColumn("_effective_time", effective)
+    return frame.filter(F.col("_effective_time") <= F.lit(until_time)) \
+        if until_time is not None else frame
 
 
 def write_result(frame, table=None, path=None, mode="overwrite", partition_by=("dt",)):

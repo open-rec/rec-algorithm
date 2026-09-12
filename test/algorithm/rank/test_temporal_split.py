@@ -53,3 +53,29 @@ def test_user_validation_split_preserves_both_labels():
 
     assert set(model.dataset.labels.iloc[list(training.indices)]) == {0, 1}
     assert set(model.dataset.labels.iloc[list(validation.indices)]) == {0, 1}
+
+
+def test_dataset_encodes_aligned_point_in_time_rows_instead_of_latest_id_map():
+    users = pd.DataFrame([{"id": "u", "country": "CN", "city": "HZ", "gender": 1,
+                           "age": 20, "tags": "tech"}])
+    items = pd.DataFrame([{"id": "i", "category": "tech", "scene": "home", "weight": 1}])
+    events = pd.DataFrame([
+        {"user_id": "u", "item_id": "i", "type": "expose", "time": 10},
+        {"user_id": "u", "item_id": "i", "type": "click", "time": 20},
+    ])
+    sample_users = pd.DataFrame([
+        {**users.iloc[0].to_dict(), "event_count": 1},
+        {**users.iloc[0].to_dict(), "event_count": 2},
+    ])
+    sample_items = pd.DataFrame([
+        {**items.iloc[0].to_dict(), "event_count": 1},
+        {**items.iloc[0].to_dict(), "event_count": 2},
+    ])
+
+    model = LRRecModel(UserFeature(users), ItemFeature(items), events,
+                       sample_users=sample_users, sample_items=sample_items)
+
+    first_user, first_item, _ = model.dataset[0]
+    second_user, second_item, _ = model.dataset[1]
+    assert not first_user.equal(second_user)
+    assert not first_item.equal(second_item)

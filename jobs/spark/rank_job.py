@@ -11,7 +11,8 @@ import urllib.request
 
 from pyspark.sql import SparkSession, Window, functions as F
 
-from jobs.spark.io import read_events, read_items, read_users
+from jobs.spark.io import (read_events, read_event_history, read_items, read_users, read_item_history,
+                           read_user_history)
 
 
 def parser():
@@ -111,9 +112,8 @@ def run(args, spark=None):
     events = label_window.filter(F.col("type").isin("click", "expose")) \
         .orderBy(F.desc("time")).limit(args.max_events)
 
-    # Freeze every feature source at one auditable instant strictly before the first label. This is
-    # conservative (all samples share a snapshot) but prevents profile mutations later in the day
-    # from leaking into earlier labels. Per-sample temporal joins can build on this contract later.
+    # The provisional snapshot is used only while constructing labels. Full entity histories and
+    # behaviour up to the latest label are exported below and resolved for each individual label.
     provisional_cutoff = events.agg(F.min("time").alias("cutoff")).first()["cutoff"]
     if provisional_cutoff is None:
         raise ValueError("rank training data has no labelled events")
@@ -122,16 +122,19 @@ def run(args, spark=None):
         .filter(F.col("scene") == args.scene)
     users = read_users(spark, date=args.date, cumulative=True, path=args.user_path,
                        as_of_time=provisional_cutoff)
-    active_events = events.join(items.select(F.col("id").alias("active_item")),
-                                events.item_id == F.col("active_item"), "left_semi")
+    active_events = events
     if args.target_type == "user":
         active_events = _user_pair_events(label_window, users, args.max_events)
-    feature_events, feature_cutoff_time = _freeze_feature_history(all_events, active_events)
-    if feature_cutoff_time != provisional_cutoff:
-        items = read_items(spark, date=args.date, cumulative=True, path=args.item_path,
-                           as_of_time=feature_cutoff_time).filter(F.col("scene") == args.scene)
-        users = read_users(spark, date=args.date, cumulative=True, path=args.user_path,
-                           as_of_time=feature_cutoff_time)
+    label_bounds = active_events.agg(F.min("time"), F.max("time")).first()
+    feature_cutoff_time, feature_until_time = label_bounds[0], label_bounds[1]
+    if feature_cutoff_time is None or feature_until_time is None:
+        raise ValueError("rank training data has no labelled events after target construction")
+    feature_events = read_event_history(spark, date=args.date, path=args.event_path,
+                                        until_time=feature_until_time)
+    items = read_item_history(spark, date=args.date, path=args.item_path,
+                              until_time=feature_until_time).filter(F.col("scene") == args.scene)
+    users = read_user_history(spark, date=args.date, path=args.user_path,
+                              until_time=feature_until_time)
     event_frame, feature_event_frame, item_frame, user_frame = (
         active_events.toPandas(), feature_events.toPandas(), items.toPandas(), users.toPandas())
     if event_frame.empty or user_frame.empty or (args.target_type == "item" and item_frame.empty):
@@ -155,7 +158,8 @@ def run(args, spark=None):
                               "min_auc": args.min_auc, "model_type": args.model_type,
                               "target_type": args.target_type,
                               "factor_dim": args.factor_dim,
-                              "feature_cutoff_time": int(feature_cutoff_time)}).encode()
+                              "feature_cutoff_time": int(feature_cutoff_time),
+                              "feature_until_time": int(feature_until_time)}).encode()
         request = urllib.request.Request(os.environ.get(
             "RANK_ENGINE_URL", "http://rank-engine:8123") + "/model/train", data=payload,
             headers={"Content-Type": "application/json"}, method="POST")
