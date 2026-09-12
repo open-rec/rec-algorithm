@@ -156,15 +156,22 @@ The same operation is exposed in the Airflow UI as the manual
 configuration.
 
 The cluster runner also exposes internal `POST /jobs/rank/train`. Its Spark job reads cumulative
-event, item, and user partitions through `date`. Item rank uses click/expose labels from the
-requested UTC business day. User rank uses a seven-day label window by default
-(`user_label_window_days`, range 1-30): shared positive interactions form U2U positives, while an
-equal number of deterministic negatives are sampled only from users active in that window. All
-behavioural features are frozen strictly before the earliest label; generated negatives inherit
-their source user's label time. The job joins candidates to the latest available entity snapshot
-and hands the bounded prepared dataset to rank-engine for PyTorch training and evaluation. Rank
-submissions default to four total executor cores (`RANK_SPARK_CORES=4`) and emit a version manifest
-for the Airflow `openrec_rank_model` publish task.
+event, item, and user partitions through `date`. Labels are mutation-resolved at the immutable end
+of the requested UTC business window, so a later update, delete, or late arrival cannot rewrite a
+rerun. Item rank uses click/expose labels from that day. User rank uses a seven-day label window by
+default (`user_label_window_days`, range 1-30): shared positive interactions form U2U positives,
+while an equal number of deterministic negatives are sampled only from users active in that
+window. Generated negatives inherit their source user's label time.
+
+Spark then performs a separate point-in-time join for every label. Entity profiles use the latest
+mutation visible at that label time, a latest `DELETE` removes the sample, and behavioural windows
+include only interactions strictly before the label. It materializes aligned `events.jsonl`,
+`sample_users.jsonl`, and `sample_items.jsonl` directories for rank-engine; rank-engine freezes the
+FeatureSpace, trains, and evaluates but does not repeat the distributed join. `max_history_rows`
+and `max_materialization_seconds` bound the job. The release request records the observation and
+feature time bounds, source/constructed/materialized sample counts, history rows, and elapsed
+materialization time. Rank submissions default to four total executor cores
+(`RANK_SPARK_CORES=4`) and emit a version manifest for the Airflow `openrec_rank_model` publish task.
 
 `POST /jobs/analytics` runs the business dashboard aggregation with four Spark cores by default.
 It scans only the selected daily event partitions, de-duplicates mutation-envelope events by trace
