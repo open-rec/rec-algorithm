@@ -2,6 +2,7 @@ import pandas as pd
 from torch.utils.data import Subset
 
 from algorithm.feature.item_feature import ItemFeature
+from algorithm.feature.feature_space import FeatureSpace
 from algorithm.feature.user_feature import UserFeature
 from algorithm.rank.lr import LRRecModel
 
@@ -79,3 +80,28 @@ def test_dataset_encodes_aligned_point_in_time_rows_instead_of_latest_id_map():
     second_user, second_item, _ = model.dataset[1]
     assert not first_user.equal(second_user)
     assert not first_item.equal(second_item)
+
+
+def test_feature_space_is_fitted_only_on_training_time_slice():
+    users = pd.DataFrame([
+        {"id": "u1", "country": "CN", "city": "train", "gender": 1, "age": 20},
+        {"id": "u2", "country": "CN", "city": "future-only", "gender": 1, "age": 90},
+    ])
+    items = pd.DataFrame([{"id": "i", "category": "c", "scene": "home", "weight": 1}])
+    events = pd.DataFrame([
+        {"user_id": "u1", "item_id": "i", "type": "click", "time": n}
+        for n in range(1, 9)
+    ] + [
+        {"user_id": "u2", "item_id": "i", "type": "expose", "time": 9},
+        {"user_id": "u2", "item_id": "i", "type": "expose", "time": 10},
+    ])
+
+    model = LRRecModel(UserFeature(users), ItemFeature(items), events,
+                       feature_space=FeatureSpace.for_model("lr"), validation_ratio=.2)
+    city = next(column for column in model.dataset.feature_space.user_columns
+                if column.name == "city")
+    age = next(column for column in model.dataset.feature_space.user_columns
+               if column.name == "age")
+
+    assert city.categories == ["train"]
+    assert age.mean == 20

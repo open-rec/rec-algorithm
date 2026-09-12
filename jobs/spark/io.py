@@ -128,6 +128,35 @@ def read_event_history(spark, table="openrec.event_entity", date=None, path=None
         if until_time is not None else frame
 
 
+def resolve_event_history(frame, observation_cutoff):
+    """Resolve the event population visible at one immutable observation cutoff."""
+    fallback = F.sha2(F.concat_ws("|", "user_id", "item_id", "scene", "type",
+                                  F.col("time").cast("string"), "trace_id"), 256)
+    stable = F.when(F.length(F.trim(F.col("event_id"))) > 0, F.col("event_id"))
+    identities = [stable]
+    if "id" in frame.columns:
+        identities.append(F.col("id"))
+    identities.append(fallback)
+    keyed = frame.filter(F.col("_effective_time") <= F.lit(observation_cutoff)) \
+        .withColumn("_event_key", F.coalesce(*identities))
+    window = Window.partitionBy("_event_key").orderBy(
+        F.desc("_effective_time"),
+        F.desc(F.when(F.upper(F.col("_operation")) == "DELETE", F.lit(1)).otherwise(F.lit(0))),
+        F.desc("dt"))
+    return keyed.withColumn("_row", F.row_number().over(window)) \
+        .filter("_row = 1 AND upper(_operation) <> 'DELETE'") \
+        .drop("_row", "_event_key", "dt", "_operation", "_mutation_time", "_effective_time")
+
+
+def read_events_as_of(spark, table="openrec.event_entity", date=None, path=None,
+                      observation_cutoff=None):
+    """Read stable labels/events without allowing later mutations to rewrite the population."""
+    if observation_cutoff is None:
+        raise ValueError("observation_cutoff is required")
+    history = read_event_history(spark, table, date, path, observation_cutoff)
+    return resolve_event_history(history, observation_cutoff)
+
+
 def read_items(spark, table="openrec.item_entity", date=None, cumulative=False, path=None,
                as_of_time=None):
     frame = read_entity(spark, table, ITEM_FIELDS, date, cumulative, cumulative, path)

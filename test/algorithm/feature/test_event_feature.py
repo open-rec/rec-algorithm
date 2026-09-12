@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from algorithm.feature.event_feature import aggregate_event_features, enrich_entity_features
+from algorithm.feature.point_in_time import resolve_event_mutations_as_of
 
 
 def _events():
@@ -66,7 +67,13 @@ def test_trace_context_keeps_distinct_expose_and_click_actions():
 def test_shared_java_python_golden_fixture():
     path = Path(__file__).parents[3] / "algorithm/feature/definitions/event-feature-parity.json"
     fixture = json.loads(path.read_text())
-    row = aggregate_event_features(pd.DataFrame(fixture["events"]), "user",
+    events = resolve_event_mutations_as_of(pd.DataFrame(fixture["events"]), 10000)
+    row = aggregate_event_features(events, "user",
                                    fixture["as_of_time"]).iloc[0]
     for name, expected in fixture["expected_user"].items():
         assert row[name] == expected
+    items = aggregate_event_features(events, "item",
+                                     fixture["as_of_time"]).set_index("item_id")
+    for item_id, expected_values in fixture["expected_items"].items():
+        for name, expected in expected_values.items():
+            assert items.loc[item_id, name] == expected

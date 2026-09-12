@@ -12,8 +12,9 @@ from algorithm.recall.content_i2i import ContentBasedI2I
 from algorithm.recall.item_cf_i2i import ItemBasedI2I
 from algorithm.recall.user_cf_u2i import UserBasedCF
 from jobs.spark.recall import content_i2i, hot, item_cf_i2i, user_cf_u2i
-from jobs.spark.io import read_items, read_users
+from jobs.spark.io import read_items, read_users, resolve_event_history
 from jobs.spark.rank_job import _freeze_feature_history, _user_pair_events
+from jobs.spark.point_in_time import materialize_point_in_time_samples_spark
 
 
 @pytest.fixture(scope="module")
@@ -136,3 +137,48 @@ def test_entity_snapshots_respect_second_cutoff_and_millisecond_mutations(spark,
 
     assert items.select("id", "weight").first().asDict() == {"id": "i", "weight": 1.0}
     assert users.select("id", "city").first().asDict() == {"id": "u", "city": "before"}
+
+
+def test_label_population_uses_fixed_observation_cutoff_and_delete_wins_tie(spark):
+    rows = [
+        ("e1", "u", "i", "s", "click", "t1", 100, "INSERT", 110, "d1"),
+        # Future update must not rewrite the label at observation cutoff 150.
+        ("e1", "u", "i", "s", "expose", "t1", 100, "UPDATE", 200, "d2"),
+        # A late-arriving old event is invisible because its mutation arrived after the cutoff.
+        ("late", "u", "i", "s", "click", "t2", 90, "INSERT", 170, "d2"),
+        ("tie", "u", "i", "s", "click", "t3", 120, "INSERT", 140, "d1"),
+        ("tie", "u", "i", "s", "click", "t3", 120, "DELETE", 140, "d1"),
+    ]
+    frame = spark.createDataFrame(rows, ["event_id", "user_id", "item_id", "scene", "type",
+                                          "trace_id", "time", "_operation",
+                                          "_effective_time", "dt"])
+    actual = resolve_event_history(frame, 150).select("event_id", "type").collect()
+    assert [row.asDict() for row in actual] == [{"event_id": "e1", "type": "click"}]
+
+
+def test_spark_materializes_aligned_point_in_time_features(spark):
+    labels = spark.createDataFrame([
+        ("l1", "u", "i", "s", "expose", 100, "x1"),
+        ("l2", "u", "i", "s", "click", 200, "x2"),
+    ], ["event_id", "user_id", "item_id", "scene", "type", "time", "trace_id"])
+    history = spark.createDataFrame([
+        ("e1", "legacy1", "u", "i", "s", "click", "1", 50, "h1", "INSERT", 60, 60, "d1"),
+        ("e2", "legacy2", "u", "i", "s", "click", "1", 150, "h2", "INSERT", 160, 160, "d1"),
+    ], ["event_id", "id", "user_id", "item_id", "scene", "type", "value", "time",
+        "trace_id", "_operation", "_mutation_time", "_effective_time", "dt"])
+    users = spark.createDataFrame([
+        ("u", "old", "INSERT", 10, 10, "d1"),
+        ("u", "new", "UPDATE", 150, 150, "d1"),
+    ], ["id", "city", "_operation", "_mutation_time", "_effective_time", "dt"])
+    items = spark.createDataFrame([
+        ("i", "s", 1.0, "INSERT", 10, 10, "d1"),
+    ], ["id", "scene", "weight", "_operation", "_mutation_time", "_effective_time", "dt"])
+
+    out_labels, out_users, out_items = materialize_point_in_time_samples_spark(
+        labels, history, users, items)
+    assert out_labels.count() == 2
+    user_rows = {row._sample_id: row for row in out_users.collect()}
+    first, second = user_rows["l1"], user_rows["l2"]
+    assert (first.city, first.event_count) == ("old", 1.0)
+    assert (second.city, second.event_count) == ("new", 2.0)
+    assert sorted(row.event_count for row in out_items.collect()) == [1.0, 2.0]

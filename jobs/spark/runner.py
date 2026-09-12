@@ -72,6 +72,9 @@ def rank_command(payload):
     target_type = payload.get("target_type", "item")
     factor_dim = int(payload.get("factor_dim", 8))
     user_label_window_days = int(payload.get("user_label_window_days", 7))
+    max_events = int(payload.get("max_events", 200000))
+    max_history_rows = int(payload.get("max_history_rows", 5000000))
+    max_materialization_seconds = int(payload.get("max_materialization_seconds", 1800))
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
         raise ValueError("date must use YYYY-MM-DD")
     if not re.match(r"^r\d{3,}$", revision):
@@ -86,6 +89,8 @@ def rank_command(payload):
         raise ValueError("factor_dim must be between 1 and 256")
     if not 1 <= user_label_window_days <= 30:
         raise ValueError("user_label_window_days must be between 1 and 30")
+    if max_events < 1 or max_history_rows < max_events or max_materialization_seconds < 1:
+        raise ValueError("invalid PIT materialization resource gate")
     return [
         "/opt/spark/bin/spark-submit", "--master", os.environ.get(
             "SPARK_MASTER_URL", "spark://spark-master:7077"),
@@ -101,7 +106,8 @@ def rank_command(payload):
         "--model-type", model_type, "--target-type", target_type,
         "--factor-dim", str(factor_dim),
         "--user-label-window-days", str(user_label_window_days),
-        "--max-events", str(payload.get("max_events", 200000)),
+        "--max-events", str(max_events), "--max-history-rows", str(max_history_rows),
+        "--max-materialization-seconds", str(max_materialization_seconds),
     ]
 
 

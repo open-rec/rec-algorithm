@@ -33,7 +33,8 @@ class EventDataSet(Dataset):
 
     def __init__(self, user_feature: UserFeature = None, item_feature: ItemFeature = None,
                  events: DataFrame = None, feature_space: FeatureSpace = None,
-                 sample_users: DataFrame = None, sample_items: DataFrame = None):
+                 sample_users: DataFrame = None, sample_items: DataFrame = None,
+                 validation_ratio: float = .2, target_type: str = "item"):
         self.user_feature = user_feature
         self.item_feature = item_feature
         self.raw_events = events
@@ -45,6 +46,8 @@ class EventDataSet(Dataset):
         self.dim = 1
         self.sample_users = sample_users
         self.sample_items = sample_items
+        self.validation_ratio = validation_ratio
+        self.target_type = target_type
         self.preprocess(feature_space)
 
     @property
@@ -59,12 +62,6 @@ class EventDataSet(Dataset):
         space = feature_space if feature_space is not None else FeatureSpace()
         candidate_frame = (self.item_feature.items if hasattr(self.item_feature, "items")
                            else self.item_feature.users)
-        if not space.fitted:
-            fit_users = self.sample_users if self.sample_users is not None else self.user_feature.users
-            fit_items = self.sample_items if self.sample_items is not None else candidate_frame
-            space.fit(users=fit_users, items=fit_items)
-        self._bind(space)
-
         # Keep only labelled events whose user and item we can actually encode. This used to be an
         # inner merge against both frames, which did the same filtering but also multiplied rows
         # whenever an id repeated, and left id_x/id_y columns behind.
@@ -88,16 +85,28 @@ class EventDataSet(Dataset):
                                   & labelled["_clicked_impression"].eq(True))]
             labelled = labelled.drop(columns=["_clicked_impression"])
         events = labelled
-        keep = (
-            events["user_id"].isin(self.user_feature_map.keys())
-            & events["item_id"].isin(self.item_feature_map.keys())
-        )
+        keep = (events["user_id"].isin(set(self.user_feature.users["id"]))
+                & events["item_id"].isin(set(candidate_frame["id"])))
         self.events = events[keep].copy()
         if "time" in self.events.columns:
             # Stable chronological order is also the train/validation boundary used by _split.
             self.events = self.events.sort_values("time", kind="mergesort")
         self.events = self.events.reset_index(drop=True)
         self.labels = (self.events["type"] == CLICK).astype(np.float32)
+
+        train_indices, _ = self.split_indices(self.validation_ratio)
+        if not space.fitted:
+            if self.sample_users is not None and self.sample_items is not None:
+                positions = self.events.iloc[train_indices]["_sample_position"].to_numpy()
+                fit_users = self.sample_users.iloc[positions]
+                fit_items = self.sample_items.iloc[positions]
+            else:
+                train_events = self.events.iloc[train_indices]
+                fit_users = self.user_feature.users[
+                    self.user_feature.users["id"].isin(train_events["user_id"])]
+                fit_items = candidate_frame[candidate_frame["id"].isin(train_events["item_id"])]
+            space.fit(users=fit_users, items=fit_items)
+        self._bind(space)
 
         # plain numpy for __getitem__: a DataFrame.iloc lookup per sample dominated data loading
         self._user_ids = self.events["user_id"].to_numpy()
@@ -117,6 +126,29 @@ class EventDataSet(Dataset):
             self._bind(space)
             self._sample_user_values = space.transform_users(aligned_users).astype(np.float32)
             self._sample_item_values = space.transform_items(aligned_items).astype(np.float32)
+
+    def split_indices(self, val_ratio=None):
+        """Return deterministic train/validation indices used before encoder fitting and training."""
+        ratio = self.validation_ratio if val_ratio is None else val_ratio
+        total = len(self.events)
+        val_size = int(total * ratio) if ratio else 0
+        if val_size <= 0 or val_size >= total:
+            return np.arange(total), np.array([], dtype=int)
+        if self.target_type == "user":
+            train_indices, validation_indices = [], []
+            labels = self.labels.to_numpy()
+            for label in np.unique(labels):
+                indices = np.flatnonzero(labels == label)
+                label_val_size = max(1, int(len(indices) * ratio))
+                if label_val_size >= len(indices):
+                    train_indices.extend(indices.tolist())
+                else:
+                    train_indices.extend(indices[:-label_val_size].tolist())
+                    validation_indices.extend(indices[-label_val_size:].tolist())
+            if validation_indices:
+                return np.array(sorted(train_indices)), np.array(sorted(validation_indices))
+        boundary = total - val_size
+        return np.arange(boundary), np.arange(boundary, total)
 
     def _bind(self, space):
         candidate_frame = (self.item_feature.items if hasattr(self.item_feature, "items")
@@ -180,7 +212,8 @@ class LRRecModel(RecModel):
 
     def __init__(self, user_feature=None, item_feature=None, events=None, feature_space=None,
                  scene=DEFAULT_SCENE, model_file=None, feature_file=None, model_type="lr",
-                 target_type="item", sample_users=None, sample_items=None):
+                 target_type="item", sample_users=None, sample_items=None,
+                 validation_ratio=.2):
         """
         Artifacts are filed per scene in the shared model store — `model/rank/{scene}/lr.pth` and
         `model/rank/{scene}/lr.features.json` — so a trained model survives across runs and does
@@ -204,7 +237,8 @@ class LRRecModel(RecModel):
 
         self.dataset = EventDataSet(user_feature=user_feature, item_feature=item_feature,
                                     events=events, feature_space=feature_space,
-                                    sample_users=sample_users, sample_items=sample_items)
+                                    sample_users=sample_users, sample_items=sample_items,
+                                    validation_ratio=validation_ratio, target_type=target_type)
         self.model = LRModel(dim=self.dataset.feature_dim)
 
     def exists(self):
@@ -320,30 +354,10 @@ class LRRecModel(RecModel):
             print(f"restored best validation checkpoint (auc:{best_auc:.4f})")
 
     def _split(self, val_ratio=0.2, seed=42):
-        total = len(self.dataset)
-        val_size = int(total * val_ratio) if val_ratio else 0
-        if val_size <= 0 or val_size >= total:
+        training, validation = self.dataset.split_indices(val_ratio)
+        if not len(validation):
             return self.dataset, None
-        if self.target_type == "user":
-            # Synthetic U2U negatives can share one timestamp. A plain chronological tail can
-            # therefore contain only negatives and make AUC undefined. Keep the temporal order
-            # within each label while reserving both classes for validation.
-            train_indices, validation_indices = [], []
-            labels = self.dataset.labels.to_numpy()
-            for label in np.unique(labels):
-                indices = np.flatnonzero(labels == label)
-                label_val_size = max(1, int(len(indices) * val_ratio))
-                if label_val_size >= len(indices):
-                    train_indices.extend(indices.tolist())
-                    continue
-                train_indices.extend(indices[:-label_val_size].tolist())
-                validation_indices.extend(indices[-label_val_size:].tolist())
-            if validation_indices:
-                return (Subset(self.dataset, sorted(train_indices)),
-                        Subset(self.dataset, sorted(validation_indices)))
-        boundary = total - val_size
-        return (Subset(self.dataset, range(0, boundary)),
-                Subset(self.dataset, range(boundary, total)))
+        return Subset(self.dataset, training.tolist()), Subset(self.dataset, validation.tolist())
 
     def evaluate(self, dataset=None, batch_size=100):
         """AUC over `dataset`, or None when it is empty or single-class (AUC is undefined then)."""

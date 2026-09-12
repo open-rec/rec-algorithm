@@ -57,12 +57,14 @@ def test_rank_command_caps_spark_and_uses_cumulative_entity_paths():
     assert command[command.index("--model-type") + 1] == "fm"
     assert command[command.index("--factor-dim") + 1] == "16"
     assert command[command.index("--user-label-window-days") + 1] == "14"
+    assert command[command.index("--max-history-rows") + 1] == "5000000"
 
 
 @pytest.mark.parametrize("payload", [
     {"date": "2026-08-21", "model_type": "deepfm"},
     {"date": "2026-08-21", "model_type": "fm", "factor_dim": 0},
     {"date": "2026-08-21", "target_type": "user", "user_label_window_days": 31},
+    {"date": "2026-08-21", "max_events": 100, "max_history_rows": 99},
 ])
 def test_rank_command_rejects_invalid_model_options(payload):
     with pytest.raises(ValueError):

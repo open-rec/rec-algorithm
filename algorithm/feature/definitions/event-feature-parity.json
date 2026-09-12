@@ -6,7 +6,9 @@
     {"trace_id":"e3","user_id":"u1","item_id":"i2","scene":" ","type":"buy","value":"3","time":"2505700"},
     {"trace_id":"e2","user_id":"u1","item_id":"i2","scene":"s2","type":"click","value":"2","time":"2592100"},
     {"trace_id":"bad","user_id":"u1","item_id":"i3","scene":"s3","type":"click","value":"9","time":"invalid"},
-    {"trace_id":"future","user_id":"u1","item_id":"i3","scene":"s3","type":"click","value":"9","time":"2592101"}
+    {"trace_id":"future","user_id":"u1","item_id":"i3","scene":"s3","type":"click","value":"9","time":"2592101"},
+    {"event_id":"retracted","trace_id":"","user_id":"u1","item_id":"i3","scene":"s3","type":"click","value":"4","time":"1000","operation":"DELETE","occurred_at":4000},
+    {"event_id":"retracted","trace_id":"","user_id":"u1","item_id":"i3","scene":"s3","type":"click","value":"4","time":"1000","operation":"INSERT","occurred_at":3000}
   ],
   "expected_user": {
     "event_count":3.0,"event_value_sum":6.0,"event_value_mean":2.0,
@@ -16,5 +18,25 @@
     "event_count_1d":2.0,"event_count_7d":2.0,"event_count_30d":3.0,
     "event_click_count":1.0,"event_expose_count":1.0,"event_buy_count":1.0,
     "event_collect_count":0.0,"event_stay_count":0.0,"event_click_rate":0.5
+  },
+  "expected_items": {
+    "i1": {
+      "event_count":1.0,"event_value_sum":1.0,"event_value_mean":1.0,
+      "event_active_days":1.0,"event_unique_scene_count":1.0,
+      "event_unique_user_count":1.0,"event_first_time":100.0,
+      "event_last_time":100.0,"event_recency_seconds":2592000.0,
+      "event_count_1d":0.0,"event_count_7d":0.0,"event_count_30d":1.0,
+      "event_click_count":0.0,"event_expose_count":1.0,"event_buy_count":0.0,
+      "event_collect_count":0.0,"event_stay_count":0.0,"event_click_rate":0.0
+    },
+    "i2": {
+      "event_count":2.0,"event_value_sum":5.0,"event_value_mean":2.5,
+      "event_active_days":2.0,"event_unique_scene_count":1.0,
+      "event_unique_user_count":1.0,"event_first_time":2505700.0,
+      "event_last_time":2592100.0,"event_recency_seconds":0.0,
+      "event_count_1d":2.0,"event_count_7d":2.0,"event_count_30d":2.0,
+      "event_click_count":1.0,"event_expose_count":0.0,"event_buy_count":1.0,
+      "event_collect_count":0.0,"event_stay_count":0.0,"event_click_rate":1.0
+    }
   }
 }

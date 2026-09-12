@@ -7,6 +7,33 @@ import pandas as pd
 from algorithm.feature.event_feature import enrich_entity_features
 
 
+def resolve_event_mutations_as_of(events, observation_cutoff):
+    """Resolve one reproducible event population at a fixed mutation observation time."""
+    if events is None or events.empty:
+        return pd.DataFrame(columns=events.columns if events is not None else None)
+    frame = events.copy()
+    event_id = frame.get("event_id", pd.Series("", index=frame.index)).fillna("").astype(str)
+    trace = frame.get("trace_id", pd.Series("", index=frame.index)).fillna("").astype(str)
+    fallback = (frame.get("user_id", pd.Series("", index=frame.index)).astype(str) + "|" +
+                frame.get("item_id", pd.Series("", index=frame.index)).astype(str) + "|" +
+                frame.get("scene", pd.Series("", index=frame.index)).astype(str) + "|" +
+                frame.get("type", pd.Series("", index=frame.index)).astype(str) + "|" +
+                frame.get("time", pd.Series("", index=frame.index)).astype(str) + "|" + trace)
+    frame["_event_key"] = event_id.where(event_id.str.strip().ne(""), fallback)
+    effective = frame.get("_effective_time", frame.get(
+        "occurred_at", pd.Series(0, index=frame.index)))
+    frame["_effective_time"] = pd.to_numeric(effective, errors="coerce").fillna(0)
+    operation = frame.get("_operation", frame.get(
+        "operation", pd.Series("INSERT", index=frame.index))).fillna("INSERT").astype(str).str.upper()
+    frame["_operation"] = operation
+    frame["_delete_order"] = operation.eq("DELETE").astype(int)
+    visible = frame[frame["_effective_time"] <= observation_cutoff].sort_values(
+        ["_effective_time", "_delete_order"], kind="mergesort") \
+        .drop_duplicates("_event_key", keep="last")
+    return visible[visible["_operation"] != "DELETE"].drop(
+        columns=["_event_key", "_effective_time", "_delete_order", "_operation"], errors="ignore")
+
+
 def _history_index(frame, fallback_times):
     result = {}
     if frame is None or frame.empty:
