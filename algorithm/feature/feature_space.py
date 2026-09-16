@@ -1,12 +1,18 @@
 """
-The canonical model feature space: which columns feed the model, in which order, over which
+The canonical model feature space: which columns feed the model, in which
+order, over which
 vocabulary.
 
-`UserFeature`/`ItemFeature` fit an encoder on whatever frame they are handed, so the resulting
-column layout is a function of *that frame*. Training fits on the CSVs while the rank engine fits on
-whatever `user:*`/`item:*` keys happen to be in Redis, and the two only agree by luck: one extra city
-shifts every column after it, and the trained weights land on a permuted feature space with no error
-raised. `FeatureSpace` pins the layout down once, and is persisted next to the checkpoint so serving
+`UserFeature`/`ItemFeature` fit an encoder on whatever frame they are handed,
+so the resulting
+column layout is a function of *that frame*. Training fits on the CSVs while
+the rank engine fits on
+whatever `user:*`/`item:*` keys happen to be in Redis, and the two only agree
+by luck: one extra city
+shifts every column after it, and the trained weights land on a permuted
+feature space with no error
+raised. `FeatureSpace` pins the layout down once, and is persisted next to the
+checkpoint so serving
 reproduces training's encoding exactly rather than re-deriving it.
 
 Fit offline, save alongside the model, load online:
@@ -25,16 +31,22 @@ import re
 import numpy as np
 import pandas as pd
 from algorithm.feature.event_feature import event_feature_columns
-from algorithm.feature.feature_catalog import ModelFeatureSet
+from algorithm.feature.feature_catalog import (
+    FeatureCatalog,
+    ModelFeatureSet,
+    select_features,
+)
 
 # column kinds
-ID = "id"        # one-hot over the categories seen at fit time
-NUM = "num"      # standardized scalar, missing values imputed to the fitted mean
-BOOL = "bool"    # 0/1
+ID = "id"  # one-hot over the categories seen at fit time
+NUM = "num"  # standardized scalar, missing values imputed to the fitted mean
+BOOL = "bool"  # 0/1
 MULTI = "multi"  # bag-of-tokens over a separator
 
-# user `tags` used to be split on "," and item `tags`/`category` on "/", which meant the same
-# concept was tokenized two different ways. Accept either so both layouts encode identically.
+# user `tags` used to be split on "," and item `tags`/`category` on "/", which
+# meant the same
+# concept was tokenized two different ways. Accept either so both layouts
+# encode identically.
 DEFAULT_MULTI_SEP = r"[,/]"
 
 _TRUTHY = {"1", "true", "t", "yes", "y"}
@@ -43,18 +55,35 @@ SCHEMA_VERSION = 1
 
 
 def _str_series(frame, name):
-    """Missing column -> empty strings, so a frame short one field degrades instead of raising."""
+    """
+    Missing column -> empty strings, so a frame short one field degrades
+    instead of raising.
+    """
     if name not in frame.columns:
         return pd.Series([""] * len(frame), index=frame.index, dtype=object)
-    return frame[name].map(
-        lambda value: ",".join(str(item) for item in value)
-        if isinstance(value, (list, tuple, set)) else value).fillna("").astype(str)
+    return (
+        frame[name]
+        .map(
+            lambda value: (
+                ",".join(str(item) for item in value)
+                if isinstance(value, (list, tuple, set))
+                else value
+            )
+        )
+        .fillna("")
+        .astype(str)
+    )
 
 
 def _num_series(frame, name):
-    """`errors="coerce"` turns junk (and Redis' JSON strings) into NaN rather than raising."""
+    """
+    `errors="coerce"` turns junk (and Redis' JSON strings) into NaN rather than
+    raising.
+    """
     if name not in frame.columns:
-        return pd.Series(np.full(len(frame), np.nan), index=frame.index, dtype=float)
+        return pd.Series(
+            np.full(len(frame), np.nan), index=frame.index, dtype=float
+        )
     return pd.to_numeric(frame[name], errors="coerce")
 
 
@@ -65,22 +94,34 @@ def _bool_series(frame, name):
     if raw.dtype == bool:
         return raw.astype(float)
     numeric = pd.to_numeric(raw, errors="coerce")
-    # strings such as "true"/"yes" coerce to NaN above; recover them before defaulting to 0
-    text = raw.where(numeric.isna()).fillna("").astype(str).str.strip().str.lower()
-    return np.where(numeric.notna(), numeric.fillna(0.0) != 0, text.isin(_TRUTHY)).astype(float)
+    # strings such as "true"/"yes" coerce to NaN above; recover them before
+    # defaulting to 0
+    text = (
+        raw.where(numeric.isna())
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+    return np.where(
+        numeric.notna(), numeric.fillna(0.0) != 0, text.isin(_TRUTHY)
+    ).astype(float)
 
 
 class ColumnSpec(object):
     """One input column plus whatever was learned about it at fit time."""
 
-    def __init__(self, name="", kind=ID, sep=DEFAULT_MULTI_SEP, feature_id=None):
+    def __init__(
+        self, name="", kind=ID, sep=DEFAULT_MULTI_SEP, feature_id=None
+    ):
         self.name = name
         self.kind = kind
         self.sep = sep
         self.feature_id = feature_id
-        self.categories = []  # ID / MULTI vocabulary, sorted so the column order is deterministic
-        self.mean = 0.0       # NUM
-        self.scale = 1.0      # NUM
+        # Sorted ID / MULTI vocabulary fixes the column order.
+        self.categories = []
+        self.mean = 0.0  # NUM
+        self.scale = 1.0  # NUM
 
     @property
     def width(self):
@@ -89,7 +130,11 @@ class ColumnSpec(object):
         return len(self.categories)
 
     def _tokenize(self, value):
-        return [t for t in (part.strip() for part in re.split(self.sep, value)) if t]
+        return [
+            t
+            for t in (part.strip() for part in re.split(self.sep, value))
+            if t
+        ]
 
     def fit(self, frame):
         if self.kind == ID:
@@ -103,7 +148,8 @@ class ColumnSpec(object):
             values = _num_series(frame, self.name)
             self.mean = float(values.mean()) if values.notna().any() else 0.0
             scale = float(values.std(ddof=0)) if values.notna().any() else 0.0
-            # a constant column has zero variance; dividing by it would produce inf/NaN
+            # a constant column has zero variance; dividing by it would produce
+            # inf/NaN
             self.scale = scale if scale > 1e-12 else 1.0
         return self
 
@@ -111,10 +157,14 @@ class ColumnSpec(object):
         rows = len(frame)
         if self.kind == NUM:
             values = _num_series(frame, self.name).fillna(self.mean)
-            # Streaming entities can be far more active than the training population. Bound
-            # standardized values to avoid uncontrolled FM quadratic extrapolation while keeping
+            # Streaming entities can be far more active than the training
+            # population. Bound
+            # standardized values to avoid uncontrolled FM quadratic
+            # extrapolation while keeping
             # ordinary observations unchanged.
-            normalized = np.clip((values.values - self.mean) / self.scale, -3.0, 3.0)
+            normalized = np.clip(
+                (values.values - self.mean) / self.scale, -3.0, 3.0
+            )
             return normalized.reshape(rows, 1)
         if self.kind == BOOL:
             return np.asarray(_bool_series(frame, self.name)).reshape(rows, 1)
@@ -125,11 +175,14 @@ class ColumnSpec(object):
         index = {category: i for i, category in enumerate(self.categories)}
         values = _str_series(frame, self.name)
         if self.kind == ID:
-            # unknown categories stay all-zero instead of blowing up, the equivalent of
+            # unknown categories stay all-zero instead of blowing up, the
+            # equivalent of
             # OneHotEncoder(handle_unknown="ignore")
             positions = values.map(index)
             known = positions.notna().values
-            out[np.arange(rows)[known], positions[known].astype(int).values] = 1.0
+            out[
+                np.arange(rows)[known], positions[known].astype(int).values
+            ] = 1.0
         else:
             for row, value in enumerate(values):
                 for token in self._tokenize(value):
@@ -153,9 +206,12 @@ class ColumnSpec(object):
 
     @classmethod
     def from_dict(cls, payload):
-        spec = cls(name=payload["name"], kind=payload["kind"],
-                   sep=payload.get("sep", DEFAULT_MULTI_SEP),
-                   feature_id=payload.get("feature"))
+        spec = cls(
+            name=payload["name"],
+            kind=payload["kind"],
+            sep=payload.get("sep", DEFAULT_MULTI_SEP),
+            feature_id=payload.get("feature"),
+        )
         spec.categories = list(payload.get("categories", []))
         spec.mean = float(payload.get("mean", 0.0))
         spec.scale = float(payload.get("scale", 1.0)) or 1.0
@@ -163,8 +219,10 @@ class ColumnSpec(object):
 
 
 def _default_user_columns():
-    # `id`/`device_id`/`name`/`phone` are deliberately absent: one-hotting them yields one column
-    # per user, which is both useless to a linear model and too wide to build a tensor from.
+    # `id`/`device_id`/`name`/`phone` are deliberately absent: one-hotting them
+    # yields one column
+    # per user, which is both useless to a linear model and too wide to build a
+    # tensor from.
     columns = [
         ColumnSpec("country", ID),
         ColumnSpec("city", ID),
@@ -172,51 +230,100 @@ def _default_user_columns():
         ColumnSpec("age", NUM),
         ColumnSpec("tags", MULTI),
     ]
-    return columns + [ColumnSpec(name, NUM) for name in event_feature_columns("item")]
+    return columns + [
+        ColumnSpec(name, NUM) for name in event_feature_columns("item")
+    ]
 
 
 def _default_item_columns():
-    # `title` and `tags` are omitted for the same reason: their vocabulary dwarfs the rest.
+    # `title` and `tags` are omitted for the same reason: their vocabulary
+    # dwarfs the rest.
     columns = [
         ColumnSpec("category", MULTI),
         ColumnSpec("scene", ID),
         ColumnSpec("weight", NUM),
     ]
-    return columns + [ColumnSpec(name, NUM) for name in event_feature_columns("user")]
+    return columns + [
+        ColumnSpec(name, NUM) for name in event_feature_columns("user")
+    ]
 
 
 class FeatureSpace(object):
-
-    def __init__(self, user_columns=None, item_columns=None, catalog_version=None,
-                 catalog_sha256=None,
-                 feature_set=None, model_type=None, target_type="item"):
-        self.user_columns = user_columns if user_columns is not None else _default_user_columns()
-        self.item_columns = item_columns if item_columns is not None else _default_item_columns()
+    def __init__(
+        self,
+        user_columns=None,
+        item_columns=None,
+        catalog_version=None,
+        catalog_sha256=None,
+        feature_set=None,
+        model_type=None,
+        target_type="item",
+        feature_definitions=None,
+    ):
+        self.user_columns = (
+            user_columns
+            if user_columns is not None
+            else _default_user_columns()
+        )
+        self.item_columns = (
+            item_columns
+            if item_columns is not None
+            else _default_item_columns()
+        )
         self.catalog_version = catalog_version
         self.catalog_sha256 = catalog_sha256
         self.feature_set = feature_set
         self.model_type = model_type
         self.target_type = target_type
+        self.feature_definitions = feature_definitions
         self.fitted = False
 
     @classmethod
-    def for_model(cls, model_type, target_type="item"):
-        """Build an unfitted space from the model's catalog-backed feature-set declaration."""
+    def for_model(cls, model_type, target_type="item", selection=None):
+        """
+        Build an unfitted space from the model's catalog-backed feature-set
+        declaration.
+        """
         selected = ModelFeatureSet.for_model(model_type)
+        chosen = select_features(model_type, target_type, selection)
+        catalog = FeatureCatalog.load()
 
         def columns(items):
-            return [ColumnSpec(name=definition["column"], kind=definition["kind"],
-                               sep=definition.get("sep", DEFAULT_MULTI_SEP),
-                               feature_id=feature_id)
-                    for feature_id, definition in items]
+            return [
+                ColumnSpec(
+                    name=definition["column"],
+                    kind=definition["kind"],
+                    sep=definition.get("sep", DEFAULT_MULTI_SEP),
+                    feature_id=feature_id,
+                )
+                for feature_id, definition in items
+            ]
 
         if target_type not in ("item", "user"):
             raise ValueError("target_type must be item or user")
-        target = selected.item if target_type == "item" else selected.user
-        return cls(user_columns=columns(selected.user), item_columns=columns(target),
-                   catalog_version=selected.catalog_version,
-                   catalog_sha256=selected.catalog_sha256, feature_set=selected.name,
-                   model_type=selected.model_type, target_type=target_type)
+        source = [(key, catalog.require(key)) for key in chosen["user"]]
+        target = [(key, catalog.require(key)) for key in chosen["candidate"]]
+        fingerprint = {
+            key: catalog.fingerprint(key)
+            for key in set(chosen["user"] + chosen["candidate"])
+        }
+        return cls(
+            user_columns=columns(source),
+            item_columns=columns(target),
+            catalog_version=selected.catalog_version,
+            catalog_sha256=selected.catalog_sha256,
+            feature_set=selected.name,
+            model_type=selected.model_type,
+            target_type=target_type,
+            feature_definitions=fingerprint,
+        )
+
+    @property
+    def selection(self):
+        return {
+            "user": [column.feature_id for column in self.user_columns],
+            "candidate": [column.feature_id for column in self.item_columns],
+        }
 
     @property
     def user_width(self):
@@ -228,7 +335,9 @@ class FeatureSpace(object):
 
     @property
     def dim(self):
-        """The model's in_features — user vector and item vector concatenated."""
+        """
+        The model's in_features — user vector and item vector concatenated.
+        """
         return self.user_width + self.item_width
 
     def fit(self, users=None, items=None):
@@ -241,18 +350,27 @@ class FeatureSpace(object):
 
     def _require_fitted(self):
         if not self.fitted:
-            raise RuntimeError("FeatureSpace is not fitted yet; call fit() or load() first")
+            raise RuntimeError(
+                "FeatureSpace is not fitted yet; call fit() or load() first"
+            )
 
     def transform_users(self, users):
         self._require_fitted()
-        return np.hstack([column.transform(users) for column in self.user_columns])
+        return np.hstack(
+            [column.transform(users) for column in self.user_columns]
+        )
 
     def transform_items(self, items):
         self._require_fitted()
-        return np.hstack([column.transform(items) for column in self.item_columns])
+        return np.hstack(
+            [column.transform(items) for column in self.item_columns]
+        )
 
     def build_maps(self, users=None, items=None):
-        """id -> encoded row, for both frames. The one place training and serving share."""
+        """
+        id -> encoded row, for both frames. The one place training and serving
+        share.
+        """
         return (
             self._build_map(users, self.transform_users(users)),
             self._build_map(items, self.transform_items(items)),
@@ -261,8 +379,11 @@ class FeatureSpace(object):
     @staticmethod
     def _build_map(frame, encoded):
         if "id" not in frame.columns:
-            raise KeyError("frame must carry an 'id' column to key the feature map by")
-        # a duplicated id keeps the last row, matching the previous dict-comprehension behaviour
+            raise KeyError(
+                "frame must carry an 'id' column to key the feature map by"
+            )
+        # a duplicated id keeps the last row, matching the previous
+        # dict-comprehension behaviour
         return {raw_id: encoded[i] for i, raw_id in enumerate(frame["id"])}
 
     def to_dict(self):
@@ -283,35 +404,79 @@ class FeatureSpace(object):
             payload["feature_set"] = self.feature_set
         if self.model_type:
             payload["model_type"] = self.model_type
+        if self.feature_definitions is not None:
+            payload["feature_definitions"] = self.feature_definitions
+            payload["feature_selection"] = self.selection
         return payload
 
     @classmethod
     def from_dict(cls, payload):
         version = payload.get("version")
         if version != SCHEMA_VERSION:
-            raise ValueError(f"unsupported feature space version {version}, expected {SCHEMA_VERSION}")
+            raise ValueError(
+                f"unsupported feature space version {version}, "
+                f"expected {SCHEMA_VERSION}"
+            )
         catalog_sha256 = payload.get("catalog_sha256")
-        if catalog_sha256:
-            from algorithm.feature.feature_catalog import FeatureCatalog
+        definitions = payload.get("feature_definitions")
+        if definitions is not None:
             installed = FeatureCatalog.load()
-            if (payload.get("catalog_version") != installed.version or
-                    catalog_sha256 != installed.sha256):
-                raise ValueError("feature space was built from a different feature catalog")
+            referenced = {
+                column.get("feature")
+                for role in ("user", "item")
+                for column in payload[role]
+            }
+            if not definitions or referenced != set(definitions):
+                raise ValueError(
+                    "feature definition references do not match encoders"
+                )
+            for feature_id, fingerprint in definitions.items():
+                if installed.fingerprint(feature_id) != fingerprint:
+                    raise ValueError(
+                        "incompatible feature definition: %s" % feature_id
+                    )
+        elif catalog_sha256:
+            installed = FeatureCatalog.load()
+            if (
+                payload.get("catalog_version") != installed.version
+                or catalog_sha256 != installed.sha256
+            ):
+                raise ValueError(
+                    "feature space was built from a different feature catalog"
+                )
         space = cls(
-            user_columns=[ColumnSpec.from_dict(item) for item in payload["user"]],
-            item_columns=[ColumnSpec.from_dict(item) for item in payload["item"]],
+            user_columns=[
+                ColumnSpec.from_dict(item) for item in payload["user"]
+            ],
+            item_columns=[
+                ColumnSpec.from_dict(item) for item in payload["item"]
+            ],
             catalog_version=payload.get("catalog_version"),
             catalog_sha256=catalog_sha256,
             feature_set=payload.get("feature_set"),
             model_type=payload.get("model_type"),
             target_type=payload.get("target_type", "item"),
+            feature_definitions=definitions,
         )
+        if (
+            payload.get("feature_selection") is not None
+            and payload["feature_selection"] != space.selection
+        ):
+            raise ValueError(
+                "feature selection does not match fitted encoders"
+            )
         space.fitted = True
-        for key, actual in (("user_width", space.user_width), ("item_width", space.item_width),
-                            ("input_dim", space.dim)):
+        for key, actual in (
+            ("user_width", space.user_width),
+            ("item_width", space.item_width),
+            ("input_dim", space.dim),
+        ):
             expected = payload.get(key)
             if expected is not None and int(expected) != actual:
-                raise ValueError("feature space %s=%s, computed %s" % (key, expected, actual))
+                raise ValueError(
+                    "feature space %s=%s, computed %s"
+                    % (key, expected, actual)
+                )
         return space
 
     def save(self, path):

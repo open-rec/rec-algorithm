@@ -12,7 +12,11 @@ from algorithm.feature.feature_space import FeatureSpace
 from algorithm.feature.item_feature import ItemFeature
 from algorithm.feature.user_feature import UserFeature
 from algorithm.rank.model import RecModel
-from algorithm.utils.file_util import DEFAULT_SCENE, feature_path, rank_model_path
+from algorithm.utils.file_util import (
+    DEFAULT_SCENE,
+    feature_path,
+    rank_model_path,
+)
 
 CLICK = "click"
 EXPOSE = "expose"
@@ -26,15 +30,24 @@ class EventDataSet(Dataset):
     """
     (user vector, item vector, clicked) triples over the labelled events.
 
-    Encoding is delegated to a `FeatureSpace` so the column layout can be persisted with the
-    checkpoint and reproduced by the rank engine, instead of being re-derived from whatever frame
+    Encoding is delegated to a `FeatureSpace` so the column layout can be
+    persisted with the
+    checkpoint and reproduced by the rank engine, instead of being re-derived
+    from whatever frame
     each side happens to hold.
     """
 
-    def __init__(self, user_feature: UserFeature = None, item_feature: ItemFeature = None,
-                 events: DataFrame = None, feature_space: FeatureSpace = None,
-                 sample_users: DataFrame = None, sample_items: DataFrame = None,
-                 validation_ratio: float = .2, target_type: str = "item"):
+    def __init__(
+        self,
+        user_feature: UserFeature = None,
+        item_feature: ItemFeature = None,
+        events: DataFrame = None,
+        feature_space: FeatureSpace = None,
+        sample_users: DataFrame = None,
+        sample_items: DataFrame = None,
+        validation_ratio: float = 0.2,
+        target_type: str = "item",
+    ):
         self.user_feature = user_feature
         self.item_feature = item_feature
         self.raw_events = events
@@ -60,36 +73,54 @@ class EventDataSet(Dataset):
 
     def preprocess(self, feature_space=None):
         space = feature_space if feature_space is not None else FeatureSpace()
-        candidate_frame = (self.item_feature.items if hasattr(self.item_feature, "items")
-                           else self.item_feature.users)
-        # Keep only labelled events whose user and item we can actually encode. This used to be an
-        # inner merge against both frames, which did the same filtering but also multiplied rows
+        candidate_frame = (
+            self.item_feature.items
+            if hasattr(self.item_feature, "items")
+            else self.item_feature.users
+        )
+        # Keep only labelled events whose user and item we can actually encode.
+        # This used to be an
+        # inner merge against both frames, which did the same filtering but
+        # also multiplied rows
         # whenever an id repeated, and left id_x/id_y columns behind.
         events = self.raw_events
-        # A clicked impression normally has both expose and click events. Its expose is not a
-        # negative label, but only trace_id can identify that pair reliably. Without it, repeated
-        # events for the same user and item must remain independent training observations.
+        # A clicked impression normally has both expose and click events. Its
+        # expose is not a
+        # negative label, but only trace_id can identify that pair reliably.
+        # Without it, repeated
+        # events for the same user and item must remain independent training
+        # observations.
         labelled = events[events["type"].isin(LABELLED_EVENTS)].copy()
         labelled["_sample_position"] = np.arange(len(labelled))
         raw_label_count = len(labelled)
-        has_trace_id = ("trace_id" in labelled.columns
-                        and labelled["trace_id"].fillna("").astype(str).ne("").any())
+        has_trace_id = (
+            "trace_id" in labelled.columns
+            and labelled["trace_id"].fillna("").astype(str).ne("").any()
+        )
         if has_trace_id:
             identity = ["trace_id"]
             valid_trace = labelled["trace_id"].fillna("").astype(str).ne("")
-            clicked = labelled[(labelled["type"] == CLICK) & valid_trace][identity]
+            clicked = labelled[(labelled["type"] == CLICK) & valid_trace][
+                identity
+            ]
             clicked = clicked.drop_duplicates()
             clicked["_clicked_impression"] = True
             labelled = labelled.merge(clicked, how="left", on=identity)
-            labelled = labelled[~((labelled["type"] == EXPOSE)
-                                  & labelled["_clicked_impression"].eq(True))]
+            labelled = labelled[
+                ~(
+                    (labelled["type"] == EXPOSE)
+                    & labelled["_clicked_impression"].eq(True)
+                )
+            ]
             labelled = labelled.drop(columns=["_clicked_impression"])
         events = labelled
-        keep = (events["user_id"].isin(set(self.user_feature.users["id"]))
-                & events["item_id"].isin(set(candidate_frame["id"])))
+        keep = events["user_id"].isin(
+            set(self.user_feature.users["id"])
+        ) & events["item_id"].isin(set(candidate_frame["id"]))
         self.events = events[keep].copy()
         if "time" in self.events.columns:
-            # Stable chronological order is also the train/validation boundary used by _split.
+            # Stable chronological order is also the train/validation boundary
+            # used by _split.
             self.events = self.events.sort_values("time", kind="mergesort")
         self.events = self.events.reset_index(drop=True)
         self.labels = (self.events["type"] == CLICK).astype(np.float32)
@@ -97,18 +128,24 @@ class EventDataSet(Dataset):
         train_indices, _ = self.split_indices(self.validation_ratio)
         if not space.fitted:
             if self.sample_users is not None and self.sample_items is not None:
-                positions = self.events.iloc[train_indices]["_sample_position"].to_numpy()
+                positions = self.events.iloc[train_indices][
+                    "_sample_position"
+                ].to_numpy()
                 fit_users = self.sample_users.iloc[positions]
                 fit_items = self.sample_items.iloc[positions]
             else:
                 train_events = self.events.iloc[train_indices]
                 fit_users = self.user_feature.users[
-                    self.user_feature.users["id"].isin(train_events["user_id"])]
-                fit_items = candidate_frame[candidate_frame["id"].isin(train_events["item_id"])]
+                    self.user_feature.users["id"].isin(train_events["user_id"])
+                ]
+                fit_items = candidate_frame[
+                    candidate_frame["id"].isin(train_events["item_id"])
+                ]
             space.fit(users=fit_users, items=fit_items)
         self._bind(space)
 
-        # plain numpy for __getitem__: a DataFrame.iloc lookup per sample dominated data loading
+        # plain numpy for __getitem__: a DataFrame.iloc lookup per sample
+        # dominated data loading
         self._user_ids = self.events["user_id"].to_numpy()
         self._item_ids = self.events["item_id"].to_numpy()
         self._label_values = self.labels.to_numpy()
@@ -116,19 +153,38 @@ class EventDataSet(Dataset):
         self._sample_item_values = None
         if self.sample_users is not None or self.sample_items is not None:
             if self.sample_users is None or self.sample_items is None:
-                raise ValueError("point-in-time training requires both aligned sample frames")
+                raise ValueError(
+                    "point-in-time training requires both aligned "
+                    "sample frames"
+                )
             positions = self.events["_sample_position"].to_numpy()
-            if (len(self.sample_users) != raw_label_count
-                    or len(self.sample_items) != raw_label_count):
-                raise ValueError("point-in-time feature rows must align with labelled events")
-            aligned_users = self.sample_users.iloc[positions].reset_index(drop=True)
-            aligned_items = self.sample_items.iloc[positions].reset_index(drop=True)
+            if (
+                len(self.sample_users) != raw_label_count
+                or len(self.sample_items) != raw_label_count
+            ):
+                raise ValueError(
+                    "point-in-time feature rows must align with "
+                    "labelled events"
+                )
+            aligned_users = self.sample_users.iloc[positions].reset_index(
+                drop=True
+            )
+            aligned_items = self.sample_items.iloc[positions].reset_index(
+                drop=True
+            )
             self._bind(space)
-            self._sample_user_values = space.transform_users(aligned_users).astype(np.float32)
-            self._sample_item_values = space.transform_items(aligned_items).astype(np.float32)
+            self._sample_user_values = space.transform_users(
+                aligned_users
+            ).astype(np.float32)
+            self._sample_item_values = space.transform_items(
+                aligned_items
+            ).astype(np.float32)
 
     def split_indices(self, val_ratio=None):
-        """Return deterministic train/validation indices used before encoder fitting and training."""
+        """
+        Return deterministic train/validation indices used before encoder
+        fitting and training.
+        """
         ratio = self.validation_ratio if val_ratio is None else val_ratio
         total = len(self.events)
         val_size = int(total * ratio) if ratio else 0
@@ -144,51 +200,81 @@ class EventDataSet(Dataset):
                     train_indices.extend(indices.tolist())
                 else:
                     train_indices.extend(indices[:-label_val_size].tolist())
-                    validation_indices.extend(indices[-label_val_size:].tolist())
+                    validation_indices.extend(
+                        indices[-label_val_size:].tolist()
+                    )
             if validation_indices:
-                return np.array(sorted(train_indices)), np.array(sorted(validation_indices))
+                return np.array(sorted(train_indices)), np.array(
+                    sorted(validation_indices)
+                )
         boundary = total - val_size
         return np.arange(boundary), np.arange(boundary, total)
 
     def _bind(self, space):
-        candidate_frame = (self.item_feature.items if hasattr(self.item_feature, "items")
-                           else self.item_feature.users)
+        candidate_frame = (
+            self.item_feature.items
+            if hasattr(self.item_feature, "items")
+            else self.item_feature.users
+        )
         self.space = space
-        user_map, item_map = space.build_maps(users=self.user_feature.users,
-                                              items=candidate_frame)
-        self.user_feature_map = {k: v.astype(np.float32) for k, v in user_map.items()}
-        self.item_feature_map = {k: v.astype(np.float32) for k, v in item_map.items()}
+        user_map, item_map = space.build_maps(
+            users=self.user_feature.users, items=candidate_frame
+        )
+        self.user_feature_map = {
+            k: v.astype(np.float32) for k, v in user_map.items()
+        }
+        self.item_feature_map = {
+            k: v.astype(np.float32) for k, v in item_map.items()
+        }
         self.dim = space.dim
 
     def rebind_space(self, space):
-        """Re-encode against an already fitted space, e.g. the one saved with a checkpoint."""
+        """
+        Re-encode against an already fitted space, e.g. the one saved with a
+        checkpoint.
+        """
         self.preprocess(space)
 
     def __len__(self):
         return len(self.events)
 
     def __getitem__(self, idx):
-        user_feature = torch.from_numpy(self._sample_user_values[idx] if self._sample_user_values is not None
-                                        else self.user_feature_map[self._user_ids[idx]])
-        item_feature = torch.from_numpy(self._sample_item_values[idx] if self._sample_item_values is not None
-                                        else self.item_feature_map[self._item_ids[idx]])
+        user_feature = torch.from_numpy(
+            self._sample_user_values[idx]
+            if self._sample_user_values is not None
+            else self.user_feature_map[self._user_ids[idx]]
+        )
+        item_feature = torch.from_numpy(
+            self._sample_item_values[idx]
+            if self._sample_item_values is not None
+            else self.item_feature_map[self._item_ids[idx]]
+        )
         label = torch.tensor(self._label_values[idx], dtype=torch.float32)
         return user_feature, item_feature, label
 
     @property
     def positive_rate(self):
-        """Share of clicks among the labelled events. 0.0 or 1.0 means there is nothing to learn."""
+        """
+        Share of clicks among the labelled events. 0.0 or 1.0 means there is
+        nothing to learn.
+        """
         if not len(self._label_values):
             return 0.0
         return float(self._label_values.mean())
 
     @property
     def user_feature_width(self):
-        """Width of one user vector, needed to stand in for a user we have no features for."""
+        """
+        Width of one user vector, needed to stand in for a user we have no
+        features for.
+        """
         return self.space.user_width if self.space else 0
 
     def user_feature_by_id(self, user_id):
-        """None when unknown — scoring an id absent from the training data is expected, not fatal."""
+        """
+        None when unknown — scoring an id absent from the training data is
+        expected, not fatal.
+        """
         return self.user_feature_map.get(user_id)
 
     def item_feature_by_id(self, item_id):
@@ -202,58 +288,99 @@ class LRModel(nn.Module):
         self.linear = nn.Linear(in_features=dim, out_features=1)
 
     def forward(self, x):
-        # a probability, not a logit: the rank engine POSTs to /model/score and uses this output
-        # directly as the score, so switching to BCEWithLogitsLoss would change that contract
+        # a probability, not a logit: the rank engine POSTs to /model/score and
+        # uses this output
+        # directly as the score, so switching to BCEWithLogitsLoss would change
+        # that contract
         pred = torch.sigmoid(self.linear(x))
         return pred
 
 
 class LRRecModel(RecModel):
-
-    def __init__(self, user_feature=None, item_feature=None, events=None, feature_space=None,
-                 scene=DEFAULT_SCENE, model_file=None, feature_file=None, model_type="lr",
-                 target_type="item", sample_users=None, sample_items=None,
-                 validation_ratio=.2):
+    def __init__(
+        self,
+        user_feature=None,
+        item_feature=None,
+        events=None,
+        feature_space=None,
+        scene=DEFAULT_SCENE,
+        model_file=None,
+        feature_file=None,
+        model_type="lr",
+        target_type="item",
+        sample_users=None,
+        sample_items=None,
+        validation_ratio=0.2,
+    ):
         """
-        Artifacts are filed per scene in the shared model store — `model/rank/{scene}/lr.pth` and
-        `model/rank/{scene}/lr.features.json` — so a trained model survives across runs and does
-        not collide with the pre-trained Douban checkpoint at the root of `model/rank`.
+        Artifacts are filed per scene in the shared model store —
+        `model/rank/{scene}/lr.pth` and
+        `model/rank/{scene}/lr.features.json` — so a trained model survives
+        across runs and does
+        not collide with the pre-trained Douban checkpoint at the root of
+        `model/rank`.
 
-        The feature space is kept out of the .pth deliberately: the rank engine loads that file with
-        a bare `load_state_dict(torch.load(...))`, so burying extra keys in it would break serving.
+        The feature space is kept out of the .pth deliberately: the rank engine
+        loads that file with
+        a bare `load_state_dict(torch.load(...))`, so burying extra keys in it
+        would break serving.
         """
         super().__init__()
         self.scene = scene
-        self.model_file = str(model_file) if model_file else str(rank_model_path(scene) / MODEL_FILENAME)
-        self.feature_file = (str(feature_file) if feature_file
-                             else str(feature_path(scene) / FEATURE_FILENAME))
+        self.model_file = (
+            str(model_file)
+            if model_file
+            else str(rank_model_path(scene) / MODEL_FILENAME)
+        )
+        self.feature_file = (
+            str(feature_file)
+            if feature_file
+            else str(feature_path(scene) / FEATURE_FILENAME)
+        )
         self.target_type = target_type
 
         if feature_space is None and Path(self.feature_file).exists():
-            # reuse the persisted vocabulary rather than re-fitting encoders over the whole frame
+            # reuse the persisted vocabulary rather than re-fitting encoders
+            # over the whole frame
             feature_space = FeatureSpace.load(self.feature_file)
         if feature_space is None:
             feature_space = FeatureSpace.for_model(model_type, target_type)
 
-        self.dataset = EventDataSet(user_feature=user_feature, item_feature=item_feature,
-                                    events=events, feature_space=feature_space,
-                                    sample_users=sample_users, sample_items=sample_items,
-                                    validation_ratio=validation_ratio, target_type=target_type)
+        self.dataset = EventDataSet(
+            user_feature=user_feature,
+            item_feature=item_feature,
+            events=events,
+            feature_space=feature_space,
+            sample_users=sample_users,
+            sample_items=sample_items,
+            validation_ratio=validation_ratio,
+            target_type=target_type,
+        )
         self.model = LRModel(dim=self.dataset.feature_dim)
 
     def exists(self):
-        """True when both artifacts are already on disk, so training can be skipped."""
-        return Path(self.model_file).exists() and Path(self.feature_file).exists()
+        """
+        True when both artifacts are already on disk, so training can be
+        skipped.
+        """
+        return (
+            Path(self.model_file).exists() and Path(self.feature_file).exists()
+        )
 
     def load_or_train(self, force=False, **train_kwargs):
         """
-        Load the persisted model when there is one, otherwise train and persist it.
+        Load the persisted model when there is one, otherwise train and persist
+        it.
 
-        Returns True if it trained. `force=True` retrains and overwrites regardless.
+        Returns True if it trained. `force=True` retrains and overwrites
+        regardless.
         """
         if not force and self.exists():
             self.load()
-            print(f"loaded {self.model_file} (dim {self.model.dim}); skipping training")
+            print(
+                f"loaded {self.model_file} (dim "
+                f"{self.model.dim}); skipping training"
+            )
             return False
         self.train(**train_kwargs)
         self.save()
@@ -261,9 +388,12 @@ class LRRecModel(RecModel):
 
     def score(self, user_id="", item_ids=None):
         """
-        Scores in the order given. An unknown user falls back to a zero vector and an unknown item
-        scores 0.0 instead of raising KeyError — the same degradation the online rank engine applies,
-        so offline and online agree on what happens to ids outside the training data.
+        Scores in the order given. An unknown user falls back to a zero vector
+        and an unknown item
+        scores 0.0 instead of raising KeyError — the same degradation the
+        online rank engine applies,
+        so offline and online agree on what happens to ids outside the training
+        data.
         """
         if not item_ids:
             return []
@@ -271,7 +401,9 @@ class LRRecModel(RecModel):
         self.model.eval()
         user_features = self.dataset.user_feature_by_id(user_id)
         if user_features is None:
-            user_features = np.zeros(self.dataset.user_feature_width, dtype=np.float32)
+            user_features = np.zeros(
+                self.dataset.user_feature_width, dtype=np.float32
+            )
         user_tensor = torch.tensor(user_features, dtype=torch.float32)
 
         scores = {}
@@ -282,44 +414,78 @@ class LRRecModel(RecModel):
                 scores[item_id] = 0.0
                 continue
             batch_features.append(
-                torch.cat((user_tensor, torch.tensor(item_features, dtype=torch.float32)), dim=0))
+                torch.cat(
+                    (
+                        user_tensor,
+                        torch.tensor(item_features, dtype=torch.float32),
+                    ),
+                    dim=0,
+                )
+            )
             scored_ids.append(item_id)
 
         if batch_features:
             with torch.no_grad():
-                # reshape rather than squeeze: squeeze collapses a single-item batch to a 0-dim
-                # tensor, whose tolist() hands back a bare float instead of a list
-                predictions = self.model(torch.stack(batch_features)).reshape(-1).tolist()
+                # reshape rather than squeeze: squeeze collapses a single-item
+                # batch to a 0-dim
+                # tensor, whose tolist() hands back a bare float instead of a
+                # list
+                predictions = (
+                    self.model(torch.stack(batch_features))
+                    .reshape(-1)
+                    .tolist()
+                )
             scores.update(zip(scored_ids, predictions))
 
         return [scores[item_id] for item_id in item_ids]
 
-    def train(self, epoch_num=10, batch_size=100, shuffle=True, learning_rate=0.01,
-              val_ratio=0.2, seed=42):
+    def train(
+        self,
+        epoch_num=10,
+        batch_size=100,
+        shuffle=True,
+        learning_rate=0.01,
+        val_ratio=0.2,
+        seed=42,
+    ):
         """
-        `shuffle` defaults to True: events arrive in whatever order the source data had, so
+        `shuffle` defaults to True: events arrive in whatever order the source
+        data had, so
         consecutive batches were strongly correlated.
 
-        The newest `val_ratio` slice is held out and scored with AUC each epoch. A temporal holdout
+        The newest `val_ratio` slice is held out and scored with AUC each
+        epoch. A temporal holdout
         avoids evaluating older events with a model trained on newer ones.
         """
         if not len(self.dataset):
-            print("no labelled events to train on — is the event data empty, or do its "
-                  "user_id/item_id values not appear in the user/item frames?")
+            print(
+                "no labelled events to train on — is the "
+                "event data empty, or do its "
+                "user_id/item_id values not appear in the user/item frames?"
+            )
             return
 
         positive_rate = self.dataset.positive_rate
         if positive_rate in (0.0, 1.0):
-            # say it out loud: BCE will fall to ~0 against a constant predictor and AUC is
-            # undefined, so the run looks healthy while the model has learned nothing
-            print(f"warning: every labelled event carries the same label (click rate "
-                  f"{positive_rate:.0%}) — loss will collapse against a constant predictor and AUC "
-                  f"is undefined. Check that the event data holds both '{CLICK}' and '{EXPOSE}'.")
+            # say it out loud: BCE will fall to ~0 against a constant predictor
+            # and AUC is
+            # undefined, so the run looks healthy while the model has learned
+            # nothing
+            print(
+                f"warning: every labelled event carries the "
+                f"same label (click rate "
+                f"{positive_rate:.0%}) — loss will collapse "
+                f"against a constant predictor and AUC "
+                f"is undefined. Check that the event data "
+                f"holds both '{CLICK}' and '{EXPOSE}'."
+            )
 
         train_set, val_set = self._split(val_ratio=val_ratio, seed=seed)
         losser = nn.BCELoss()
         optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        dataloader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=shuffle)
+        dataloader = DataLoader(
+            dataset=train_set, batch_size=batch_size, shuffle=shuffle
+        )
         best_auc, best_state = None, None
 
         for epoch in range(epoch_num):
@@ -328,26 +494,35 @@ class LRRecModel(RecModel):
             for user, item, label in dataloader:
                 x = torch.cat((user, item), dim=1)
                 y_pred = self.model(x)
-                loss = losser(y_pred.squeeze(), label)
+                loss = losser(y_pred.reshape(-1), label)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
                 batches += 1
 
-            # the mean over the epoch, not whatever the last batch happened to be; and no
+            # the mean over the epoch, not whatever the last batch happened to
+            # be; and no
             # NameError when the dataset yields nothing
             if not batches:
-                print(f"epoch {epoch + 1}/{epoch_num}, no batches — is the event data empty?")
+                print(
+                    f"epoch {epoch + 1}/{epoch_num}, no batches — "
+                    f"is the event data empty?"
+                )
                 continue
-            message = f"epoch {epoch + 1}/{epoch_num}, loss:{epoch_loss / batches:.4f}"
+            message = (
+                f"epoch {epoch + 1}/{epoch_num}, "
+                f"loss:{epoch_loss / batches:.4f}"
+            )
             auc = self.evaluate(val_set, batch_size=batch_size)
             if auc is not None:
                 message += f", val auc:{auc:.4f}"
                 if best_auc is None or auc > best_auc:
                     best_auc = auc
-                    best_state = {name: value.detach().clone()
-                                  for name, value in self.model.state_dict().items()}
+                    best_state = {
+                        name: value.detach().clone()
+                        for name, value in self.model.state_dict().items()
+                    }
             print(message)
         if best_state is not None:
             self.model.load_state_dict(best_state)
@@ -357,17 +532,28 @@ class LRRecModel(RecModel):
         training, validation = self.dataset.split_indices(val_ratio)
         if not len(validation):
             return self.dataset, None
-        return Subset(self.dataset, training.tolist()), Subset(self.dataset, validation.tolist())
+        return Subset(self.dataset, training.tolist()), Subset(
+            self.dataset, validation.tolist()
+        )
 
     def evaluate(self, dataset=None, batch_size=100):
-        """AUC over `dataset`, or None when it is empty or single-class (AUC is undefined then)."""
+        """
+        AUC over `dataset`, or None when it is empty or single-class (AUC is
+        undefined then).
+        """
         if dataset is None or not len(dataset):
             return None
         self.model.eval()
         predictions, labels = [], []
         with torch.no_grad():
-            for user, item, label in DataLoader(dataset=dataset, batch_size=batch_size):
-                predictions.extend(self.model(torch.cat((user, item), dim=1)).reshape(-1).tolist())
+            for user, item, label in DataLoader(
+                dataset=dataset, batch_size=batch_size
+            ):
+                predictions.extend(
+                    self.model(torch.cat((user, item), dim=1))
+                    .reshape(-1)
+                    .tolist()
+                )
                 labels.extend(label.tolist())
         if len(set(labels)) < 2:
             return None
@@ -375,26 +561,39 @@ class LRRecModel(RecModel):
 
     def save(self):
         torch.save(self.model.state_dict(), self.model_file)
-        # without the feature space the checkpoint is unusable: nothing else records what its
-        # columns mean, which is how the repo ended up with three different guesses at `dim`
+        # without the feature space the checkpoint is unusable: nothing else
+        # records what its
+        # columns mean, which is how the repo ended up with three different
+        # guesses at `dim`
         self.dataset.feature_space.save(self.feature_file)
-        print(f"saved {self.model_file} and {self.feature_file} (dim {self.model.dim})")
+        print(
+            f"saved {self.model_file} and "
+            f"{self.feature_file} (dim {self.model.dim})"
+        )
 
     def load(self):
         feature_file = Path(self.feature_file)
         if feature_file.exists():
-            # re-encode with the vocabulary the model was trained on, not one re-fitted on whatever
+            # re-encode with the vocabulary the model was trained on, not one
+            # re-fitted on whatever
             # frames this process happens to hold
             self.dataset.rebind_space(FeatureSpace.load(feature_file))
             if self.model.dim != self.dataset.feature_dim:
                 self.model = LRModel(dim=self.dataset.feature_dim)
 
         state = torch.load(self.model_file, map_location="cpu")
-        checkpoint_dim = state["linear.weight"].shape[-1] if "linear.weight" in state else None
+        checkpoint_dim = (
+            state["linear.weight"].shape[-1]
+            if "linear.weight" in state
+            else None
+        )
         if checkpoint_dim is not None and checkpoint_dim != self.model.dim:
             raise ValueError(
-                f"{self.model_file} was trained with dim={checkpoint_dim}, but the current feature "
-                f"space yields dim={self.model.dim}. Retrain, or point feature_file at the "
-                f"{FEATURE_FILENAME} this checkpoint was saved with.")
+                f"{self.model_file} was trained with "
+                f"dim={checkpoint_dim}, but the current feature "
+                f"space yields dim={self.model.dim}. Retrain, "
+                f"or point feature_file at the "
+                f"{FEATURE_FILENAME} this checkpoint was saved with."
+            )
         self.model.load_state_dict(state)
         self.model.eval()

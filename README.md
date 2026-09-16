@@ -380,3 +380,19 @@ pytest -q test/algorithm/recall/test_item_cf_i2i_merge.py
 | time       | int    | yes      |                                        |  
 | is_login   | bool   | no       | could be recommend                     |  
 | ext_fields | json   | no       |                                        |  
+
+
+### Selected global features
+
+`select_features(model_type, target_type, selection)` validates an ordered subset
+of the existing LR/FM capability declarations. `selection` has `user` and
+`candidate` lists; candidate features belong to the target entity. Omitting it
+keeps the model's default feature set. `FeatureSpace.for_model(..., selection)`
+persists the selection and fingerprints of selected definitions alongside fitted
+encoders. Definition fingerprints include referenced policies. Adding an unrelated
+catalog feature does not change a fitted subset; changing a dependency rejects it.
+
+The Spark rank job accepts `--feature-selection` JSON and `--scene global` for
+all-scene training. Neither registration nor selection creates a feature producer:
+new features require aligned offline and online implementations before being added
+to a model's supported set. Rebuild the wheel and downstream images together.
