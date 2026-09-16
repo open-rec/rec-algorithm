@@ -11,7 +11,10 @@ setup(
     extras_require={
         'spark': ['pyspark==3.5.3'],
         'publish': ['redis>=5,<9', 'elasticsearch>=8,<9'],
-        'cluster': ['pyspark==3.5.3', 'redis>=5,<9', 'elasticsearch>=8,<9'],
+        'cluster': [
+            'pyspark==3.5.3', 'redis>=5,<9', 'elasticsearch>=8,<9',
+            'pydantic>=2.7,<3',
+        ],
     },
     entry_points={
         'console_scripts': [

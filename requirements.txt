@@ -5,3 +5,5 @@ scikit-learn==1.9.0
 numpy==2.5.2
 jieba==0.42.1  # feature.text_feature
 # sentence-transformers is optional: only feature.vector_feature needs it, and it is loaded lazily
+
+pydantic==2.13.5  # offline rank TrainingRequest (Pydantic v2)
