@@ -1,13 +1,33 @@
 services:
+  rank-artifact-init:
+    image: openrec/rec-algorithm:latest
+    user: root
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        mkdir -p /models/releases /models/training
+        chown -R spark:spark /models/releases /models/training
+    volumes:
+      - openrec-model-artifacts:/models
+    network_mode: none
+    restart: "no"
+
   rec-algorithm-runner:
     build:
       context: .
       args:
         SPARK_IMAGE: ${SPARK_IMAGE:-openrec/spark:3.5.3}
+        TRAINING_BASE_IMAGE: ${RANK_TRAINING_BASE_IMAGE:-pytorch/pytorch:2.8.0-cuda12.9-cudnn9-runtime}
+        TRAINING_PIP_INDEX_URL: ${RANK_TRAINING_PIP_INDEX_URL:-https://pypi.org/simple}
     image: openrec/rec-algorithm:latest
     container_name: rec-algorithm-runner
     hostname: rec-algorithm-runner
+    depends_on:
+      rank-artifact-init:
+        condition: service_completed_successfully
     restart: unless-stopped
+    cpus: ${RANK_RUNNER_CPUS:-4}
+    mem_limit: ${RANK_RUNNER_MEMORY:-8g}
     command: ["python3", "-m", "jobs.spark.runner"]
     environment:
       SPARK_MASTER_URL: spark://spark-master:7077
@@ -15,7 +35,7 @@ services:
       RECALL_RUNNER_PORT: 8090
       REC_CONSOLE_URL: http://rec-console:8095
       MODEL_ARTIFACT_ROOT: /models/releases
-      RANK_ENGINE_URL: http://rank-engine:8123
+      RANK_TRAINING_THREADS: ${RANK_TRAINING_THREADS:-2}
     volumes:
       - ../bigdata-platform/spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
       - openrec-hive-libs:/opt/hive-libs:ro

@@ -1,5 +1,5 @@
 """
-Internal HTTP gateway that lets Airflow submit OpenRec PySpark recall jobs.
+Offline gateway for feature capabilities and OpenRec Spark jobs.
 """
 
 import json
@@ -243,12 +243,34 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == "/features":
+            from algorithm.feature.feature_catalog import feature_catalog
+
+            self._write(200, {"code": 0, "data": feature_catalog()})
+            return
         if self.path != "/health":
             self._write(404, {"error": "not found"})
             return
         self._write(200, {"status": "ok", "busy": JOB_LOCK.locked()})
 
     def do_POST(self):
+        if self.path == "/features/validate":
+            from algorithm.feature.feature_catalog import select_features
+
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                info = json.loads(self.rfile.read(length) or b"{}")
+                if not isinstance(info, dict):
+                    raise ValueError("configuration must be an object")
+                selection = select_features(
+                    info.get("model_type", "lr"),
+                    info.get("target_type", "item"),
+                    info.get("feature_selection"),
+                )
+                self._write(200, {"code": 0, "data": selection})
+            except (ValueError, TypeError) as error:
+                self._write(422, {"detail": str(error)})
+            return
         if self.path not in (
             "/jobs/recall",
             "/jobs/rank/train",

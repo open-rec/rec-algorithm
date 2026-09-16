@@ -1,0 +1,5 @@
+# PyTorch 2.8 is supplied by the dedicated training base image.
+numpy==2.3.5
+pandas==2.3.3
+scikit-learn==1.7.2
+pydantic==2.13.5

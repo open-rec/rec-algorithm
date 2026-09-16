@@ -155,3 +155,36 @@ def test_rank_command_preserves_feature_order_and_training_options():
     )
     assert command[command.index("--batch-size") + 1] == "32"
     assert command[command.index("--validation-ratio") + 1] == "0.3"
+
+
+def test_feature_gateway_is_available_without_inference_service():
+    import json
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    from jobs.spark.runner import Handler
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    base = "http://127.0.0.1:%s" % httpd.server_port
+    try:
+        with urllib.request.urlopen(base + "/features") as response:
+            assert "lr" in json.load(response)["data"]["models"]
+        selection = {"user": ["user.age"], "candidate": ["item.weight"]}
+        request = urllib.request.Request(
+            base + "/features/validate",
+            data=json.dumps({"feature_selection": selection}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request) as response:
+            assert json.load(response)["data"] == selection
+        request.data = b'{"feature_selection": {}}'
+        with pytest.raises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(request)
+        assert error.value.code == 422
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)

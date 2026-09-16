@@ -10,7 +10,8 @@ import shutil
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import urllib.request
+import subprocess
+import sys
 
 from pyspark.sql import SparkSession, Window, functions as F
 
@@ -317,45 +318,51 @@ def run(args, spark=None):
             ) as output:
                 for row in frame.toJSON().toLocalIterator():
                     output.write(row + "\n")
-        payload = json.dumps(
-            {
-                "feature_selection": args.feature_selection,
-                "scene": args.scene,
-                "version": version,
-                "business_date": args.date,
-                "revision": args.revision,
-                "dataset_dir": str(dataset_dir),
-                "epochs": args.epochs,
-                "batch_size": args.batch_size,
-                "validation_ratio": args.validation_ratio,
-                "min_auc": args.min_auc,
-                "model_type": args.model_type,
-                "target_type": args.target_type,
-                "factor_dim": args.factor_dim,
-                "label_observation_cutoff": label_observation_cutoff,
-                "input_label_count": input_label_count,
-                "constructed_label_count": constructed_label_count,
-                "materialized_label_count": materialized_count,
-                "history_row_count": history_rows,
-                "materialization_seconds": elapsed,
-                "feature_cutoff_time": int(feature_cutoff_time),
-                "feature_until_time": int(feature_until_time),
-            }
-        ).encode()
-        request = urllib.request.Request(
-            os.environ.get("RANK_ENGINE_URL", "http://rank-engine:8123")
-            + "/model/train",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        configuration = {
+            "feature_selection": args.feature_selection,
+            "scene": args.scene,
+            "version": version,
+            "business_date": args.date,
+            "revision": args.revision,
+            "dataset_dir": str(dataset_dir),
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "validation_ratio": args.validation_ratio,
+            "min_auc": args.min_auc,
+            "model_type": args.model_type,
+            "target_type": args.target_type,
+            "factor_dim": args.factor_dim,
+            "label_observation_cutoff": label_observation_cutoff,
+            "input_label_count": input_label_count,
+            "constructed_label_count": constructed_label_count,
+            "materialized_label_count": materialized_count,
+            "history_row_count": history_rows,
+            "materialization_seconds": elapsed,
+            "feature_cutoff_time": int(feature_cutoff_time),
+            "feature_until_time": int(feature_until_time),
+        }
+        request_path = dataset_dir / "training-request.json"
+        request_path.write_text(json.dumps(configuration))
+        subprocess.run(
+            [
+                os.environ.get("RANK_TRAINING_PYTHON", sys.executable),
+                "-m",
+                "algorithm.rank.training",
+                "--request",
+                str(request_path),
+                "--artifact-root",
+                args.artifact_root,
+            ],
+            check=True,
         )
-        with urllib.request.urlopen(request, timeout=3600) as response:
-            result = json.loads(response.read())
-        if result.get("status") != "success":
-            raise ValueError(
-                "rank-engine training failed: %s" % result.get("message")
-            )
-        manifest = result["data"]
+        manifest_path = (
+            Path(args.artifact_root)
+            / args.target_type
+            / args.scene
+            / version
+            / "manifest.json"
+        )
+        manifest = json.loads(manifest_path.read_text())
         print("OPENREC_MODEL_MANIFEST=" + json.dumps(manifest, sort_keys=True))
         return manifest
     except Exception:

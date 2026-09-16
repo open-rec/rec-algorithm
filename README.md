@@ -166,12 +166,37 @@ window. Generated negatives inherit their source user's label time.
 Spark then performs a separate point-in-time join for every label. Entity profiles use the latest
 mutation visible at that label time, a latest `DELETE` removes the sample, and behavioural windows
 include only interactions strictly before the label. It materializes aligned `events.jsonl`,
-`sample_users.jsonl`, and `sample_items.jsonl` directories for rank-engine; rank-engine freezes the
-FeatureSpace, trains, and evaluates but does not repeat the distributed join. `max_history_rows`
+`sample_users.jsonl`, and `sample_items.jsonl` directories. The Spark driver invokes
+`algorithm.rank.training` in its dedicated Python/PyTorch environment to fit the
+FeatureSpace, train, evaluate and atomically write an immutable release. `max_history_rows`
 and `max_materialization_seconds` bound the job. The release request records the observation and
 feature time bounds, source/constructed/materialized sample counts, history rows, and elapsed
 materialization time. Rank submissions default to four total executor cores
-(`RANK_SPARK_CORES=4`) and emit a version manifest for the Airflow `openrec_rank_model` publish task.
+(`RANK_SPARK_CORES=4`) and emit a version manifest for the Airflow `openrec_rank_model` registration task.
+Activation remains a separate rec-console operation.
+
+The runner also serves `GET /features` and `POST /features/validate` for the
+console's global catalog and training selection. Neither these operations nor
+training call rank-engine. The online service may be stopped throughout training.
+
+The image contains separate Spark and training Python environments. Spark performs
+distributed sample preparation; current LR/FM use CPU PyTorch in a subprocess on
+the offline driver, **not distributed parameter training**. The subprocess failure
+fails the Spark job, so Airflow cannot register a failed release. No checkpoint is
+published until the evaluation gate passes. Invalid/duplicate sample identities,
+empty samples, single-class labels and undefined AUC fail training. Fitted encoders
+use only the training time slice. Existing checkpoint and sidecar formats remain
+compatible with online inference.
+
+Build arguments `TRAINING_BASE_IMAGE` and `TRAINING_PIP_INDEX_URL` select the
+independent PyTorch base and package mirror. Compose exposes these as
+`RANK_TRAINING_BASE_IMAGE` and `RANK_TRAINING_PIP_INDEX_URL`; `--local` in example
+uses the local PyTorch image. `RANK_TRAINING_PYTHON` selects the trainer interpreter
+(default `/opt/conda/bin/python`), `RANK_TRAINING_THREADS=2` limits CPU threads, and
+`RANK_RUNNER_CPUS=4` / `RANK_RUNNER_MEMORY=8g` limit the offline runner container.
+Training dependencies are in `requirements-training.txt`; torch comes from the
+base image. Large training sets still need sufficient driver memory for pandas
+and PyTorch after Spark preparation.
 
 `POST /jobs/analytics` runs the business dashboard aggregation with four Spark cores by default.
 It scans only the selected daily event partitions, de-duplicates mutation-envelope events by trace
@@ -278,17 +303,19 @@ so `FeatureSpace` is saved beside every checkpoint and must be loaded by `rank-e
 `algorithm/feature/definitions/feature.catalog.json` is a generated, package-local copy of the
 global catalog owned by `model/feature/catalog/feature.catalog.json`; do not edit it directly. It
 contains every entity and behavioural feature OpenRec currently produces. `lr.feature-set.json` and
-`fm.feature-set.json` independently select the catalog entries each model family trains on. The
-catalog and sets are training-time governance inputs only: they validate names, ownership, kinds,
-and the data-processor event-feature contract.
+`fm.feature-set.json` declare each model family's implemented feature capabilities and default
+selection. A training request can select an ordered subset of those supported features. These
+files do not replace the canonical catalog; new features require matching offline and online
+implementations before being offered for training.
 
 Training fits the selected set against that version's data and writes a self-contained
 `lr.features.json` or `fm.features.json` beside the checkpoint. This fitted sidecar includes the
 ordered columns, category vocabularies, numeric normalization statistics, catalog/set provenance,
-and computed widths. Deployment validates the fitted sidecar's catalog version and SHA-256 against
-the catalog packaged in the rec-algorithm wheel, then uses the immutable checkpoint and sidecar.
-Consequently a mismatched catalog cannot silently alter an already published model, and LR/FM may
-evolve their selections independently even when their current v1 sets contain the same features.
+and computed widths. New sidecars persist fingerprints of selected feature definitions;
+deployment checks these against the packaged catalog, so unrelated additions do not invalidate
+an existing release. Older sidecars retain whole-catalog version/SHA-256 validation. Deployment
+uses the fitted checkpoint and encoders without refitting or consulting a live catalog service.
+LR/FM can select different subsets even when their default capability sets contain the same features.
 
 ### materialize online features
 
@@ -396,3 +423,8 @@ The Spark rank job accepts `--feature-selection` JSON and `--scene global` for
 all-scene training. Neither registration nor selection creates a feature producer:
 new features require aligned offline and online implementations before being added
 to a model's supported set. Rebuild the wheel and downstream images together.
+
+When upgrading a shared model volume, Compose runs `rank-artifact-init` first to
+transfer release/training directory ownership from the former online writer to
+Spark. The online activation directory is unchanged. If starting the runner with
+`--no-deps`, run this initialization service explicitly first.
