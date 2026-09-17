@@ -12,6 +12,7 @@ class ItemTable(Table):
             Column('id', ColumnType.STRING),
             Column('title', ColumnType.STRING),
             Column('category', ColumnType.STRING),
+            Column('subcategory', ColumnType.STRING),
             Column('tags', ColumnType.STRING),
             Column('scene', ColumnType.STRING),
             Column('pub_time', ColumnType.INT),

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from algorithm.feature.feature_catalog import select_features
 from algorithm.feature.feature_space import FeatureSpace
+from algorithm.feature.content_feature import enrich_item_content_features
 from algorithm.feature.item_feature import ItemFeature
 from algorithm.feature.point_in_time import materialize_point_in_time_samples
 from algorithm.feature.user_feature import UserFeature
@@ -176,6 +177,13 @@ def train_release(info: TrainingRequest, artifact_root):
             raise ValueError(
                 "rank training has no entities active at their label times"
             )
+        if info.target_type == "item":
+            # Spark and local PIT paths converge here. Apply profile defaults
+            # and the shared freshness formula before availability checks and
+            # FeatureSpace fitting.
+            sample_items = enrich_item_content_features(
+                sample_items, events["time"].to_numpy()
+            )
         space = FeatureSpace.for_model(
             info.model_type, info.target_type, selection
         )
@@ -196,7 +204,10 @@ def train_release(info: TrainingRequest, artifact_root):
         latest_items = _latest_feature_rows(events, sample_items)
         user_features = UserFeature(latest_users)
         item_features = (
-            ItemFeature(latest_items)
+            ItemFeature(
+                latest_items,
+                as_of_time=info.feature_until_time or info.feature_cutoff_time,
+            )
             if info.target_type == "item"
             else UserFeature(latest_items)
         )

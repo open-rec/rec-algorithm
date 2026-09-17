@@ -25,6 +25,7 @@ Fit offline, save alongside the model, load online:
     user_vectors, item_vectors = space.build_maps(users_df, items_df)
 """
 
+import hashlib
 import json
 import re
 
@@ -42,6 +43,7 @@ ID = "id"  # one-hot over the categories seen at fit time
 NUM = "num"  # standardized scalar, missing values imputed to the fitted mean
 BOOL = "bool"  # 0/1
 MULTI = "multi"  # bag-of-tokens over a separator
+HASH = "hash"  # fixed-width signed feature hashing for unbounded text
 
 # user `tags` used to be split on "," and item `tags`/`category` on "/", which
 # meant the same
@@ -112,12 +114,20 @@ class ColumnSpec(object):
     """One input column plus whatever was learned about it at fit time."""
 
     def __init__(
-        self, name="", kind=ID, sep=DEFAULT_MULTI_SEP, feature_id=None
+        self,
+        name="",
+        kind=ID,
+        sep=DEFAULT_MULTI_SEP,
+        feature_id=None,
+        hash_dim=0,
     ):
         self.name = name
         self.kind = kind
         self.sep = sep
         self.feature_id = feature_id
+        self.hash_dim = int(hash_dim)
+        if self.kind == HASH and self.hash_dim < 1:
+            raise ValueError("hashed text features require a positive hash_dim")
         # Sorted ID / MULTI vocabulary fixes the column order.
         self.categories = []
         self.mean = 0.0  # NUM
@@ -127,6 +137,8 @@ class ColumnSpec(object):
     def width(self):
         if self.kind in (NUM, BOOL):
             return 1
+        if self.kind == HASH:
+            return self.hash_dim
         return len(self.categories)
 
     def _tokenize(self, value):
@@ -135,6 +147,10 @@ class ColumnSpec(object):
             for t in (part.strip() for part in re.split(self.sep, value))
             if t
         ]
+
+    @staticmethod
+    def _text_tokens(value):
+        return re.findall(r"[^\W_]+", value.lower(), flags=re.UNICODE)
 
     def fit(self, frame):
         if self.kind == ID:
@@ -169,6 +185,23 @@ class ColumnSpec(object):
         if self.kind == BOOL:
             return np.asarray(_bool_series(frame, self.name)).reshape(rows, 1)
 
+        if self.kind == HASH:
+            out = np.zeros((rows, self.hash_dim), dtype=np.float64)
+            for row, value in enumerate(_str_series(frame, self.name)):
+                tokens = self._text_tokens(value)
+                if not tokens:
+                    continue
+                scale = 1.0 / np.sqrt(len(tokens))
+                for token in tokens:
+                    digest = hashlib.blake2b(
+                        token.encode("utf-8"), digest_size=8
+                    ).digest()
+                    number = int.from_bytes(digest, "little")
+                    out[row, number % self.hash_dim] += (
+                        scale if number & (1 << 63) else -scale
+                    )
+            return out
+
         out = np.zeros((rows, len(self.categories)), dtype=np.float64)
         if not self.categories:
             return out
@@ -199,6 +232,7 @@ class ColumnSpec(object):
             "categories": self.categories,
             "mean": self.mean,
             "scale": self.scale,
+            "hash_dim": self.hash_dim,
         }
         if self.feature_id:
             payload["feature"] = self.feature_id
@@ -211,6 +245,7 @@ class ColumnSpec(object):
             kind=payload["kind"],
             sep=payload.get("sep", DEFAULT_MULTI_SEP),
             feature_id=payload.get("feature"),
+            hash_dim=payload.get("hash_dim", 0),
         )
         spec.categories = list(payload.get("categories", []))
         spec.mean = float(payload.get("mean", 0.0))
@@ -295,6 +330,7 @@ class FeatureSpace(object):
                     kind=definition["kind"],
                     sep=definition.get("sep", DEFAULT_MULTI_SEP),
                     feature_id=feature_id,
+                    hash_dim=definition.get("hash_dim", 0),
                 )
                 for feature_id, definition in items
             ]

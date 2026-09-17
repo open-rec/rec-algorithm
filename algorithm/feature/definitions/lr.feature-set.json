@@ -1,7 +1,7 @@
 {
   "name": "ranking-lr-v1",
   "model_type": "lr",
-  "catalog_version": 2,
+  "catalog_version": 3,
   "user": [
     "user.country", "user.city", "user.gender", "user.age", "user.tags",
     "user.event_count", "user.event_value_sum", "user.event_value_mean",
@@ -13,6 +13,7 @@
     "user.event_click_rate"
   ],
   "item": [
+    "item.title", "item.subcategory", "item.tags", "item.content_age_hours",
     "item.category", "item.scene", "item.weight", "item.event_count",
     "item.event_value_sum", "item.event_value_mean", "item.event_active_days",
     "item.event_unique_scene_count", "item.event_unique_user_count",

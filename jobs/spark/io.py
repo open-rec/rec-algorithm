@@ -12,7 +12,8 @@ EVENT_FIELDS = {
     "ext_fields": "string",
 }
 ITEM_FIELDS = {
-    "id": "string", "title": "string", "category": "string", "tags": "string",
+    "id": "string", "title": "string", "category": "string",
+    "subcategory": "string", "tags": "string",
     "scene": "string", "pub_time": "long", "modify_time": "long", "expire_time": "long",
     "status": "boolean", "weight": "double", "ext_fields": "string",
 }

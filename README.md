@@ -367,6 +367,7 @@ pytest -q test/algorithm/recall/test_item_cf_i2i_merge.py
 | id          | string | yes      | item uniq id                         |  
 | title       | string | yes      |                                      |
 | category    | string | yes      | single value                         |  
+| subcategory | string | no       | one or more content subcategories    |
 | tags        | string | no       | multi value                          |  
 | scene       | string | yes      | relation recommend or guess you like |  
 | pub_time    | int    | yes      |                                      |  
@@ -423,6 +424,13 @@ The Spark rank job accepts `--feature-selection` JSON and `--scene global` for
 all-scene training. Neither registration nor selection creates a feature producer:
 new features require aligned offline and online implementations before being added
 to a model's supported set. Rebuild the wheel and downstream images together.
+
+Item ranking also supports cold-start content features from the canonical item
+schema: `title`, `subcategory`, `tags`, and publication-time-derived
+`content_age_hours`. Unbounded text uses persisted fixed-width signed BLAKE2b
+feature hashing, so training and rank-engine encode unseen text identically
+without shipping a vocabulary. Content age is calculated at each label time in
+offline point-in-time materialization and at feature refresh time online.
 
 When upgrading a shared model volume, Compose runs `rank-artifact-init` first to
 transfer release/training directory ownership from the former online writer to

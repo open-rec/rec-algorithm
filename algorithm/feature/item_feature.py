@@ -10,6 +10,7 @@ from algorithm.feature.feature import (
 )
 from algorithm.feature.feature_space import DEFAULT_MULTI_SEP
 from algorithm.feature.event_feature import enrich_entity_features
+from algorithm.feature.content_feature import enrich_item_content_features
 
 
 class ItemFeature(object):
@@ -20,7 +21,9 @@ class ItemFeature(object):
     """
 
     def __init__(self, items=None, events=None, as_of_time=None):
-        self._items = enrich_entity_features(items, events, "item", as_of_time)
+        self._items = enrich_item_content_features(
+            enrich_entity_features(items, events, "item", as_of_time), as_of_time
+        )
         self._events = events
 
     @property

@@ -44,7 +44,11 @@ class FeatureCatalog(object):
 
     @staticmethod
     def _runtime_definition(item):
-        kind = {"categorical": "id", "multi_value": "multi"}.get(item["shape"])
+        kind = {
+            "categorical": "id",
+            "multi_value": "multi",
+            "hashed_text": "hash",
+        }.get(item["shape"])
         if kind is None:
             kind = "bool" if item["value_type"] == "boolean" else "num"
         return dict(item, column=item["name"], kind=kind)

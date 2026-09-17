@@ -5,6 +5,7 @@ from bisect import bisect_right
 import pandas as pd
 
 from algorithm.feature.event_feature import enrich_entity_features
+from algorithm.feature.content_feature import enrich_item_content_features
 
 
 def resolve_event_mutations_as_of(events, observation_cutoff):
@@ -140,6 +141,8 @@ def materialize_point_in_time_samples(events, feature_events, users, items,
         item_entity = "user" if target_type == "user" else "item"
         item_frame = enrich_entity_features(pd.DataFrame([item]), _behavior_as_of(
             item_events, event["item_id"], label_time), item_entity, label_time)
+        if target_type == "item":
+            item_frame = enrich_item_content_features(item_frame, label_time)
         labels.append(event.to_dict())
         sample_users.append(user_frame.iloc[0].to_dict())
         sample_items.append(item_frame.iloc[0].to_dict())

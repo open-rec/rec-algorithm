@@ -102,6 +102,20 @@ def materialize_point_in_time_samples_spark(labels, event_history, user_history,
     candidate_rows = _enrich(prepared, candidate_history, event_history,
                              "item_id", candidate_entity,
                              "item_id" if target_type == "user" else "user_id")
+    if target_type == "item":
+        label_times = prepared.select("_sample_id", "_label_time")
+        candidate_rows = candidate_rows.join(label_times, "_sample_id", "left") \
+            .withColumn(
+                "content_age_hours",
+                F.greatest(
+                    F.lit(0.0),
+                    (
+                        F.col("_label_time")
+                        - F.coalesce(F.col("pub_time"), F.col("_label_time"))
+                    )
+                    / F.lit(3600.0),
+                ),
+            ).drop("_label_time")
     valid = user_rows.select("_sample_id").join(
         candidate_rows.select("_sample_id"), "_sample_id", "inner")
     return (prepared.join(valid, "_sample_id", "inner").drop("_label_time"),
