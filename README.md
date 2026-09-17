@@ -50,7 +50,7 @@ bash package.sh                              # -> dist/rec_algorithm-0.0.1-*.whl
 | Path | Contents |
 |---|---|
 | `algorithm/recall/` | Item and user recall strategies: CF, content similarity, hot/new, sequence embedding, and ALS-based U2U |
-| `algorithm/rank/` | LR/FM item and user rank models, subclassing `RecModel` |
+| `algorithm/rank/` | LR/FM rank models and a candidate-aware Transformer building block |
 | `algorithm/feature/` | feature encoders for users and items |
 | `algorithm/meta/` | table and column definitions — the source of truth for CSV headers |
 | `algorithm/structure/` | `ScoreItem`, JSON helpers |
@@ -283,6 +283,14 @@ fm_model = FMRecModel(user_feature=user_feature, item_feature=item_feature,
 fm_model.train(epoch_num=10, batch_size=256, learning_rate=0.003)
 fm_model.save()                    # -> model/rank/default/fm.pth
 ```
+
+`CandidateAwareTransformerModel` is the reusable single-objective sequence
+ranker. It projects dense candidate/history item vectors, encodes a bounded
+history with self-attention, applies candidate-aware attention, and fuses the
+result with the existing flattened OpenRec global feature vector. The
+`experiments` repository owns its first EB-NeRD training protocol. The cluster
+release job and rank-engine lifecycle still support LR/FM only, so Transformer
+serving activation requires a separately versioned deployment contract.
 
 The cluster rank job accepts `model_type=lr|fm` and `factor_dim` (FM only). Its release manifest
 keeps the model type, latent width, feature-set identity, fitted input dimension and sidecar checksum
