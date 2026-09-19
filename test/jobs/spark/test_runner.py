@@ -101,6 +101,13 @@ def test_rank_command_caps_spark_and_uses_cumulative_entity_paths():
     assert command[command.index("--max-history-rows") + 1] == "5000000"
 
 
+def test_rank_command_accepts_lightgbm():
+    command = rank_command(
+        {"date": "2026-08-21", "model_type": "lightgbm"}
+    )
+    assert command[command.index("--model-type") + 1] == "lightgbm"
+
+
 @pytest.mark.parametrize(
     "payload",
     [

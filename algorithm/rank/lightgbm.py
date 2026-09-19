@@ -57,7 +57,7 @@ class LightGBMBinaryModel(object):
         from lightgbm import Booster
         value = cls.__new__(cls)
         value.model = None
-        value.booster = Booster(model_file=str(path), params={"num_threads": n_jobs})
+        value.booster = Booster(model_file=str(path))
         return value
 
 

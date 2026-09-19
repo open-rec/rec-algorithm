@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
+import numpy as np
 import torch
 from pydantic import BaseModel, Field
 
@@ -25,7 +26,9 @@ from algorithm.feature.item_feature import ItemFeature
 from algorithm.feature.point_in_time import materialize_point_in_time_samples
 from algorithm.feature.user_feature import UserFeature
 from algorithm.rank.fm import FMRecModel
+from algorithm.rank.lightgbm import LightGBMBinaryModel
 from algorithm.rank.lr import LRRecModel
+from sklearn.metrics import roc_auc_score
 
 
 class TrainingRequest(BaseModel):
@@ -40,7 +43,7 @@ class TrainingRequest(BaseModel):
     batch_size: int = Field(default=256, ge=1)
     validation_ratio: float = Field(default=0.2, gt=0, lt=1)
     min_auc: float = Field(default=0.0, ge=0, le=1)
-    model_type: str = Field(default="lr", pattern="^(lr|fm)$")
+    model_type: str = Field(default="lr", pattern="^(lr|fm|lightgbm)$")
     factor_dim: int = Field(default=8, ge=1, le=256)
     label_observation_cutoff: int = Field(ge=0)
     input_label_count: int = Field(ge=0)
@@ -152,9 +155,13 @@ def train_release(info: TrainingRequest, artifact_root):
 
         events = read_records(dataset / "events.jsonl")
         model_type = info.model_type.strip().lower()
-        model_filename = "%s.pth" % model_type
+        model_filename = (
+            "lightgbm.txt" if model_type == "lightgbm" else "%s.pth" % model_type
+        )
         feature_filename = "%s.features.json" % model_type
-        model_class = {"lr": LRRecModel, "fm": FMRecModel}[model_type]
+        model_class = {"lr": LRRecModel, "fm": FMRecModel}.get(
+            model_type, LRRecModel
+        )
         model_kwargs = (
             {"factor_dim": info.factor_dim} if model_type == "fm" else {}
         )
@@ -223,6 +230,7 @@ def train_release(info: TrainingRequest, artifact_root):
             sample_users=sample_users,
             sample_items=sample_items,
             validation_ratio=info.validation_ratio,
+            **({"model_type": "lightgbm"} if model_type == "lightgbm" else {}),
             **model_kwargs,
         )
         if not len(rank_model.dataset):
@@ -234,20 +242,68 @@ def train_release(info: TrainingRequest, artifact_root):
             raise ValueError(
                 "rank training requires both click and expose labels"
             )
-        training, validation = rank_model._split(
-            val_ratio=info.validation_ratio, seed=42
+        train_indices, validation_indices = rank_model.dataset.split_indices(
+            info.validation_ratio
         )
-        rank_model.train(
-            epoch_num=info.epochs,
-            batch_size=info.batch_size,
-            val_ratio=info.validation_ratio,
-        )
-        auc = rank_model.evaluate(validation, batch_size=info.batch_size)
+        lightgbm_estimators = None
+        if model_type == "lightgbm":
+            matrix = np.stack(
+                [
+                    np.concatenate((user.numpy(), item.numpy()))
+                    for user, item, _ in rank_model.dataset
+                ]
+            )
+            labels = rank_model.dataset._label_values
+            lightgbm_estimators = max(50, info.epochs * 100)
+            lightgbm_model = LightGBMBinaryModel(
+                n_estimators=lightgbm_estimators, n_jobs=threads
+            )
+            validation = None
+            if len(validation_indices):
+                validation = (
+                    matrix[validation_indices],
+                    labels[validation_indices],
+                    None,
+                )
+            lightgbm_model.fit(
+                matrix[train_indices],
+                labels[train_indices],
+                validation=validation,
+            )
+            predictions = (
+                lightgbm_model.predict_proba(matrix[validation_indices])
+                if len(validation_indices)
+                else None
+            )
+            auc = (
+                roc_auc_score(labels[validation_indices], predictions)
+                if predictions is not None
+                and len(set(labels[validation_indices].tolist())) > 1
+                else None
+            )
+            lightgbm_model.save(staging / model_filename)
+            rank_model.dataset.feature_space.save(staging / feature_filename)
+            training_samples = len(train_indices)
+            validation_samples = len(validation_indices)
+            model_dim = rank_model.dataset.feature_dim
+        else:
+            training, validation = rank_model._split(
+                val_ratio=info.validation_ratio, seed=42
+            )
+            rank_model.train(
+                epoch_num=info.epochs,
+                batch_size=info.batch_size,
+                val_ratio=info.validation_ratio,
+            )
+            auc = rank_model.evaluate(validation, batch_size=info.batch_size)
+            rank_model.save()
+            training_samples = len(training)
+            validation_samples = len(validation) if validation is not None else 0
+            model_dim = rank_model.model.dim
         if auc is None:
             raise ValueError("AUC is undefined for validation data")
         if auc is not None and auc < info.min_auc:
             raise ValueError("AUC %.6f is below %.6f" % (auc, info.min_auc))
-        rank_model.save()
         # Keep the unencoded entity snapshots next to the checkpoint. They are
         # the portable
         # bootstrap representation for Redis; *.features.json remains the
@@ -287,6 +343,11 @@ def train_release(info: TrainingRequest, artifact_root):
                 "factor_dim": info.factor_dim,
                 "scene": info.scene,
                 "target_type": info.target_type,
+                **(
+                    {"n_estimators": lightgbm_estimators}
+                    if lightgbm_estimators is not None
+                    else {}
+                ),
             },
             "version": info.version,
             "scene": info.scene,
@@ -309,7 +370,7 @@ def train_release(info: TrainingRequest, artifact_root):
             "catalog_version": feature_space.catalog_version,
             "catalog_sha256": feature_space.catalog_sha256,
             "feature_sha256": feature_sha256,
-            "input_dim": rank_model.model.dim,
+            "input_dim": model_dim,
             "metrics": {
                 "auc": auc,
                 "positive_rate": rank_model.dataset.positive_rate,
@@ -327,11 +388,16 @@ def train_release(info: TrainingRequest, artifact_root):
                 ),
                 "history_rows": info.history_row_count,
                 "materialization_seconds": info.materialization_seconds,
-                "training_samples": len(training),
-                "validation_samples": len(validation),
+                "training_samples": training_samples,
+                "validation_samples": validation_samples,
                 "label_time_min": int(events["time"].min()),
                 "label_time_max": int(events["time"].max()),
-                "feature_dim": rank_model.model.dim,
+                "feature_dim": model_dim,
+                **(
+                    {"n_estimators": lightgbm_estimators}
+                    if lightgbm_estimators is not None
+                    else {}
+                ),
                 **(
                     {"factor_dim": rank_model.model.factor_dim}
                     if model_type == "fm"

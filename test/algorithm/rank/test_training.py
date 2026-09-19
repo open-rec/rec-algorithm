@@ -81,6 +81,13 @@ def test_train_request_requires_auditable_feature_cutoff():
     assert request.constructed_label_count == 8
 
 
+def test_train_request_accepts_lightgbm():
+    request = training_request("/models/training/item/run").model_copy(
+        update={"model_type": "lightgbm"}
+    )
+    assert request.model_type == "lightgbm"
+
+
 def training_request(dataset):
     return TrainingRequest(
         scene="global",

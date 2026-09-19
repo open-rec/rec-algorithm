@@ -50,7 +50,7 @@ bash package.sh                              # -> dist/rec_algorithm-0.0.1-*.whl
 | Path | Contents |
 |---|---|
 | `algorithm/recall/` | Item and user recall strategies: CF, content similarity, hot/new, sequence embedding, and ALS-based U2U |
-| `algorithm/rank/` | LR/FM rank models and a candidate-aware Transformer building block |
+| `algorithm/rank/` | LR/FM/LightGBM rank models and a candidate-aware Transformer building block |
 | `algorithm/feature/` | feature encoders for users and items |
 | `algorithm/meta/` | table and column definitions — the source of truth for CSV headers |
 | `algorithm/structure/` | `ScoreItem`, JSON helpers |
@@ -180,7 +180,7 @@ console's global catalog and training selection. Neither these operations nor
 training call rank-engine. The online service may be stopped throughout training.
 
 The image contains separate Spark and training Python environments. Spark performs
-distributed sample preparation; current LR/FM use CPU PyTorch in a subprocess on
+distributed sample preparation; LR/FM use CPU PyTorch and LightGBM uses its CPU learner in a subprocess on
 the offline driver, **not distributed parameter training**. The subprocess failure
 fails the Spark job, so Airflow cannot register a failed release. No checkpoint is
 published until the evaluation gate passes. Invalid/duplicate sample identities,
@@ -221,7 +221,7 @@ python -m tool.build_default_artifacts \
 `gen_test_data.py` creates an impression funnel with expose, stay, click, collect and buy events.
 The conversion probability depends on user interests, item metadata, popularity and position, so
 rank and recall receive learnable rather than independent random signals. The artifact builder emits
-feature snapshots, fitted LR/FM feature spaces, both checkpoints, all recall tables and a hash
+feature snapshots, fitted LR/FM/LightGBM feature spaces, model artifacts, all recall tables and a hash
 manifest. `tool/gen_recall_data.py` remains available as a standalone CLI when only recall is needed.
 
 ## recall
@@ -289,12 +289,16 @@ ranker. It projects dense candidate/history item vectors, encodes a bounded
 history with self-attention, applies candidate-aware attention, and fuses the
 result with the existing flattened OpenRec global feature vector. The
 `experiments` repository owns its first EB-NeRD training protocol. The cluster
-release job and rank-engine lifecycle still support LR/FM only, so Transformer
+release job and rank-engine lifecycle support the LR/FM/LightGBM tabular models only, so Transformer
 serving activation requires a separately versioned deployment contract.
 
-The cluster rank job accepts `model_type=lr|fm` and `factor_dim` (FM only). Its release manifest
-keeps the model type, latent width, feature-set identity, fitted input dimension and sidecar checksum
-so rec-console can validate and atomically deploy or roll back either type.
+The cluster rank job accepts `model_type=lr|fm|lightgbm` and `factor_dim` (FM only). Its release manifest
+records the effective LightGBM tree count (`max(50, epochs * 100)`) because the shared
+`epochs` control is translated to boosting rounds. Cluster LightGBM uses binary click/expose
+classification over independent point-in-time samples; the separate LambdaRank wrapper is intended
+for datasets that provide contiguous impression/query groups. The release manifest keeps the model
+type, latent width, feature-set identity, fitted input dimension and sidecar checksum so rec-console
+can validate and atomically deploy or roll back each supported type.
 
 Labels come from the event type: `click` is 1 and an unclicked `expose` is 0. When an impression has
 both events, its expose remains available to behavioural aggregation but is not a negative label.
@@ -317,13 +321,13 @@ files do not replace the canonical catalog; new features require matching offlin
 implementations before being offered for training.
 
 Training fits the selected set against that version's data and writes a self-contained
-`lr.features.json` or `fm.features.json` beside the checkpoint. This fitted sidecar includes the
+`lr.features.json`, `fm.features.json`, or `lightgbm.features.json` beside the model. This fitted sidecar includes the
 ordered columns, category vocabularies, numeric normalization statistics, catalog/set provenance,
 and computed widths. New sidecars persist fingerprints of selected feature definitions;
 deployment checks these against the packaged catalog, so unrelated additions do not invalidate
 an existing release. Older sidecars retain whole-catalog version/SHA-256 validation. Deployment
 uses the fitted checkpoint and encoders without refitting or consulting a live catalog service.
-LR/FM can select different subsets even when their default capability sets contain the same features.
+LR/FM/LightGBM can select different subsets even when their default capability sets contain the same features.
 
 ### materialize online features
 

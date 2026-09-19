@@ -50,7 +50,9 @@ def parser():
     result.add_argument("--batch-size", type=int, default=256)
     result.add_argument("--validation-ratio", type=float, default=0.2)
     result.add_argument("--min-auc", type=float, default=0.0)
-    result.add_argument("--model-type", choices=("lr", "fm"), default="lr")
+    result.add_argument(
+        "--model-type", choices=("lr", "fm", "lightgbm"), default="lr"
+    )
     result.add_argument(
         "--target-type", choices=("item", "user"), default="item"
     )

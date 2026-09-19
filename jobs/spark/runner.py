@@ -126,8 +126,8 @@ def rank_command(payload):
         raise ValueError("revision must look like r001")
     if not re.match(r"^[A-Za-z0-9_-]+$", scene):
         raise ValueError("invalid scene")
-    if model_type not in ("lr", "fm"):
-        raise ValueError("model_type must be lr or fm")
+    if model_type not in ("lr", "fm", "lightgbm"):
+        raise ValueError("model_type must be lr, fm or lightgbm")
     if target_type not in ("item", "user"):
         raise ValueError("target_type must be item or user")
     if not 1 <= factor_dim <= 256:

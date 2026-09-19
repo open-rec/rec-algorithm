@@ -14,7 +14,7 @@ setup(
         'publish': ['redis>=5,<9', 'elasticsearch>=8,<9'],
         'cluster': [
             'pyspark==3.5.3', 'redis>=5,<9', 'elasticsearch>=8,<9',
-            'pydantic>=2.7,<3',
+            'pydantic>=2.7,<3', 'lightgbm>=4.3,<5',
         ],
     },
     entry_points={
