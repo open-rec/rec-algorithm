@@ -10,25 +10,35 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
+from sklearn.metrics import roc_auc_score
+from torch.utils.data import DataLoader, Subset
 
 from algorithm.feature.item_feature import ItemFeature
 from algorithm.feature.feature_catalog import FeatureCatalog
+from algorithm.feature.feature_space import FeatureSpace
 from algorithm.feature.user_feature import UserFeature
 from algorithm.rank.fm import FMRecModel
+from algorithm.rank.lightgbm import LightGBMBinaryModel
 from algorithm.rank.lr import LRRecModel
+from algorithm.rank.lr import EventDataSet
 from tool.gen_recall_data import generate as generate_recall
 
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 9
+BUILD_VERSION = 10
 REQUIRED = (
     "rank/item/user_feature.csv", "rank/item/item_feature.csv",
     "rank/item/lr.features.json", "rank/item/fm.features.json",
+    "rank/item/lightgbm.features.json",
     "rank/user/user_feature.csv", "rank/user/lr.features.json",
-    "rank/user/fm.features.json", "rank/item/lr.pth", "rank/item/fm.pth",
+    "rank/user/fm.features.json", "rank/user/lightgbm.features.json",
+    "rank/item/lr.pth", "rank/item/fm.pth", "rank/item/lightgbm.txt",
     "rank/item/lr.manifest.json", "rank/item/fm.manifest.json",
-    "rank/user/lr.pth", "rank/user/fm.pth",
+    "rank/item/lightgbm.manifest.json",
+    "rank/user/lr.pth", "rank/user/fm.pth", "rank/user/lightgbm.txt",
     "rank/user/lr.manifest.json", "rank/user/fm.manifest.json",
+    "rank/user/lightgbm.manifest.json",
     "recall/item_cf_i2i.csv", "recall/content_i2i.csv", "recall/user_cf_u2i.csv",
     "recall/hot.csv", "recall/new.csv", "recall/item_seq_emb.csv",
 )
@@ -58,6 +68,17 @@ def reusable(model_root, inputs, catalog=None):
     manifest_path = root / "default.manifest.json"
     if not manifest_path.is_file() or any(not (root / name).is_file() for name in REQUIRED):
         return False
+    try:
+        manifest = json.loads(manifest_path.read_text())
+        return (manifest.get("schema_version") == SCHEMA_VERSION
+                and manifest.get("build_version") == BUILD_VERSION
+                and manifest.get("inputs") == inputs
+                and all(manifest.get(name) == value for name, value in catalog.items())
+                and set(manifest.get("outputs", {})) == set(REQUIRED)
+                and all(sha256(root / name) == digest
+                        for name, digest in manifest.get("outputs", {}).items()))
+    except (OSError, ValueError):
+        return False
 
 
 def reusable_recall(model_root, inputs):
@@ -69,16 +90,6 @@ def reusable_recall(model_root, inputs):
         return (manifest.get("inputs") == inputs
                 and all((root / name).is_file() and outputs.get(name) == sha256(root / name)
                         for name in RECALL_REQUIRED))
-    except (OSError, ValueError):
-        return False
-    try:
-        manifest = json.loads(manifest_path.read_text())
-        return (manifest.get("schema_version") == SCHEMA_VERSION
-                and manifest.get("build_version") == BUILD_VERSION
-                and manifest.get("inputs") == inputs
-                and all(manifest.get(name) == value for name, value in catalog.items())
-                and all(sha256(root / name) == digest
-                        for name, digest in manifest.get("outputs", {}).items()))
     except (OSError, ValueError):
         return False
 
@@ -118,6 +129,63 @@ def _train(model_class, model_type, users, candidates, feature_events, labels, c
         "gate": {"min_auc": min_auc, "passed": True},
     }
     (stage / "rank" / target_type / (model_type + ".manifest.json")).write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
+def _lightgbm_matrix(dataset, indices, batch_size=4096):
+    """Encode one deterministic dataset slice without exposing fitted internals."""
+    subset = Subset(dataset, np.asarray(indices, dtype=int).tolist())
+    features, labels = [], []
+    for users, candidates, batch_labels in DataLoader(subset, batch_size=batch_size):
+        features.append(np.concatenate((users.numpy(), candidates.numpy()), axis=1))
+        labels.append(batch_labels.numpy())
+    return np.concatenate(features), np.concatenate(labels)
+
+
+def _train_lightgbm(users, candidates, feature_events, labels, cutoff, stage,
+                    min_auc, target_type="item"):
+    """Train a binary LightGBM default artifact over the shared FeatureSpace."""
+    model_file = stage / "rank" / target_type / "lightgbm.txt"
+    feature_file = stage / "rank" / target_type / "lightgbm.features.json"
+    candidate_features = (ItemFeature(candidates, feature_events, cutoff)
+                          if target_type == "item"
+                          else UserFeature(candidates, feature_events, cutoff))
+    feature_space = FeatureSpace.for_model("lightgbm", target_type)
+    dataset = EventDataSet(
+        UserFeature(users, feature_events, cutoff), candidate_features, labels,
+        feature_space=feature_space, target_type=target_type,
+    )
+    if not len(dataset) or dataset.positive_rate in (0.0, 1.0):
+        raise ValueError("lightgbm training requires non-empty click and unclicked-expose labels")
+    training, validation = dataset.split_indices(.2)
+    x_train, y_train = _lightgbm_matrix(dataset, training)
+    x_validation, y_validation = _lightgbm_matrix(dataset, validation)
+    model = LightGBMBinaryModel(
+        n_estimators=300, learning_rate=.05, num_leaves=31,
+        min_child_samples=50, random_state=42,
+    ).fit(x_train, y_train, validation=(x_validation, y_validation, None))
+    predictions = model.predict_proba(x_validation)
+    auc = roc_auc_score(y_validation, predictions)
+    if auc < min_auc:
+        raise ValueError("lightgbm validation AUC %.6f is below %.6f" % (auc, min_auc))
+    model.save(model_file)
+    dataset.feature_space.save(feature_file)
+    manifest = {
+        "version": "default", "scene": target_type, "model_type": "lightgbm",
+        "target_type": target_type,
+        "created_at": datetime.now(timezone.utc).isoformat(), "status": "evaluated",
+        "feature_cutoff_time": cutoff, "model": model_file.name,
+        "feature": feature_file.name,
+        "feature_set": dataset.feature_space.feature_set,
+        "catalog_version": dataset.feature_space.catalog_version,
+        "catalog_sha256": dataset.feature_space.catalog_sha256,
+        "feature_sha256": sha256(feature_file), "input_dim": dataset.feature_dim,
+        "metrics": {"auc": auc, "positive_rate": dataset.positive_rate,
+                    "samples": len(dataset), "feature_dim": dataset.feature_dim,
+                    "n_estimators": 300},
+        "gate": {"min_auc": min_auc, "passed": True},
+    }
+    (stage / "rank" / target_type / "lightgbm.manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
 
@@ -178,11 +246,15 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
                epochs, factor_dim, min_auc, "item")
         _train(FMRecModel, "fm", users, items, feature_events, labels, cutoff, stage,
                epochs, factor_dim, min_auc, "item")
+        _train_lightgbm(users, items, feature_events, labels, cutoff, stage,
+                        min_auc, "item")
         user_labels = _user_pair_labels(events, users)
         _train(LRRecModel, "lr", users, users, feature_events, user_labels, cutoff, stage,
                epochs, factor_dim, 0.0, "user")
         _train(FMRecModel, "fm", users, users, feature_events, user_labels, cutoff, stage,
                epochs, factor_dim, 0.0, "user")
+        _train_lightgbm(users, users, feature_events, user_labels, cutoff, stage,
+                        0.0, "user")
         if reusable_recall(model_root, inputs):
             for name in RECALL_REQUIRED:
                 shutil.copy2(model_root / name, stage / name)

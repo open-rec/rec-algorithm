@@ -1,7 +1,16 @@
 {
-  "name": "ranking-fm-v1",
-  "model_type": "fm",
+  "schema_version": 1,
+  "name": "ranking-lightgbm-v1",
+  "model_type": "lightgbm",
   "catalog_version": 14,
+  "families": [
+    "attribute",
+    "content",
+    "statistical",
+    "temporal",
+    "contextual",
+    "interaction"
+  ],
   "user": [
     "user.country",
     "user.city",
@@ -65,13 +74,5 @@
     "item.event_value_sum_1h",
     "item.event_expose_count_24h",
     "item.event_value_sum_24h"
-  ],
-  "families": [
-    "attribute",
-    "content",
-    "statistical",
-    "temporal",
-    "contextual",
-    "interaction"
   ]
 }

@@ -54,6 +54,7 @@ def test_catalog_covers_the_realtime_event_feature_contract():
     [
         ("lr", "ranking-lr-v1"),
         ("fm", "ranking-fm-v1"),
+        ("lightgbm", "ranking-lightgbm-v1"),
     ],
 )
 def test_model_feature_sets_fit_and_persist_model_metadata(
@@ -68,7 +69,7 @@ def test_model_feature_sets_fit_and_persist_model_metadata(
 
     assert payload["feature_set"] == expected_name
     assert payload["model_type"] == model_type
-    assert payload["catalog_version"] == 3
+    assert payload["catalog_version"] == 14
     assert len(payload["catalog_sha256"]) == 64
     assert payload["input_dim"] == loaded.dim
     assert loaded.user_columns[0].feature_id == "user.country"
@@ -144,7 +145,7 @@ def test_user_rank_uses_the_user_contract_on_both_sides():
     )
 
 
-@pytest.mark.parametrize("model_type", ["lr", "fm"])
+@pytest.mark.parametrize("model_type", ["lr", "fm", "lightgbm"])
 @pytest.mark.parametrize("target_type", ["item", "user"])
 def test_selected_features_round_trip(model_type, target_type):
     users, items = frames()
@@ -243,3 +244,38 @@ def test_feature_selection_loads_from_spark_zip(tmp_path):
         capture_output=True,
         text=True,
     )
+
+
+def test_catalog_exposes_user_facing_taxonomy_and_scene_metadata():
+    from algorithm.feature.feature_catalog import feature_catalog, select_features
+
+    payload = feature_catalog()
+    assert {value["id"] for value in payload["taxonomy"]["families"]} == {
+        "attribute", "content", "statistical", "temporal", "contextual",
+        "interaction",
+    }
+    assert "news" in payload["scene_presets"]
+    selected = select_features(
+        "lightgbm", families=["content", "temporal"], scene="news"
+    )
+    assert "item.title" in selected["candidate"]
+    assert "item.content_age_hours" in selected["candidate"]
+    assert all(
+        FeatureCatalog.load().require(value)["family"] in {"content", "temporal"}
+        for values in selected.values() for value in values
+    )
+    context = [
+        feature for feature in payload["features"]
+        if feature["id"].startswith("context.")
+    ]
+    assert len(context) == 54
+    assert all(feature["family"] == "contextual" for feature in context)
+    assert all(feature["status"] == "experimental" for feature in context)
+    assert all(not feature["materialization"]["online"] for feature in context)
+    interaction = [
+        feature for feature in payload["features"]
+        if feature["id"].startswith("interaction.")
+    ]
+    assert len(interaction) == 23
+    assert all(feature["family"] == "interaction" for feature in interaction)
+    assert all(feature["status"] == "experimental" for feature in interaction)

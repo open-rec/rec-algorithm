@@ -28,6 +28,9 @@ def test_user_event_aggregation_respects_snapshot_and_counts_types():
     assert row.event_expose_count == 1
     assert row.event_click_rate == 0.5
     assert row.event_recency_seconds == 100
+    assert row.event_expose_count_5m == 1
+    assert row.event_expose_count_1h == 1
+    assert row.event_value_sum_5m == 6
 
 
 def test_item_event_aggregation_and_zero_fill_for_unseen_entity():
@@ -37,6 +40,20 @@ def test_item_event_aggregation_and_zero_fill_for_unseen_entity():
     assert enriched.loc["i1", "event_unique_user_count"] == 2
     assert enriched.loc["never-seen", "event_count"] == 0
     assert enriched.loc["never-seen", "event_click_rate"] == 0
+    assert enriched.loc["i1", "event_value_sum_5m"] == 3
+    assert enriched.loc["never-seen", "event_expose_count_24h"] == 0
+
+
+def test_short_windows_are_point_in_time_and_filter_exposures():
+    events = pd.DataFrame([
+        {"user_id": "u", "item_id": "i", "type": "expose", "value": 2, "time": 100},
+        {"user_id": "u", "item_id": "i", "type": "click", "value": 3, "time": 350},
+        {"user_id": "u", "item_id": "i", "type": "expose", "value": 5, "time": 401},
+    ])
+    row = aggregate_event_features(events, "item", as_of_time=400).iloc[0]
+    assert row.event_expose_count_5m == 1
+    assert row.event_value_sum_5m == 5
+    assert row.event_expose_count_1h == 1
 
 
 def test_event_identity_deduplicates_and_empty_scene_is_missing():

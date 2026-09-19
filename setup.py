@@ -9,6 +9,7 @@ setup(
     author='xsank',
     author_email='xsank@foxmail.com',
     extras_require={
+        'lightgbm': ['lightgbm>=4.3,<5'],
         'spark': ['pyspark==3.5.3'],
         'publish': ['redis>=5,<9', 'elasticsearch>=8,<9'],
         'cluster': [

@@ -19,6 +19,7 @@ CATALOG_FILE = DEFINITION_ROOT / "feature.catalog.json"
 FEATURE_SET_FILES = {
     "lr": DEFINITION_ROOT / "lr.feature-set.json",
     "fm": DEFINITION_ROOT / "fm.feature-set.json",
+    "lightgbm": DEFINITION_ROOT / "lightgbm.feature-set.json",
 }
 
 
@@ -125,7 +126,9 @@ class ModelFeatureSet(object):
         return feature_set
 
 
-def select_features(model_type, target_type="item", selection=None):
+def select_features(
+    model_type, target_type="item", selection=None, families=None, scene=None
+):
     """Resolve an ordered, explicitly supported source/candidate selection."""
     supported = ModelFeatureSet.for_model(model_type)
     if target_type not in ("item", "user"):
@@ -144,6 +147,20 @@ def select_features(model_type, target_type="item", selection=None):
     for role, definitions in roles.items():
         allowed = dict(definitions)
         ids = list(allowed) if selection is None else selection[role]
+        if families is not None:
+            unknown = set(families) - set(supported.payload.get("families", []))
+            if unknown:
+                raise ValueError("unknown feature families: %s" % sorted(unknown))
+            ids = [
+                value for value in ids
+                if allowed[value].get("family") in set(families)
+            ]
+        if scene is not None:
+            ids = [
+                value for value in ids
+                if "all" in allowed[value].get("scenes", ["all"])
+                or scene in allowed[value].get("scenes", [])
+            ]
         if (
             not isinstance(ids, list)
             or not ids
@@ -186,6 +203,8 @@ def feature_catalog():
         "catalog_version": catalog.version,
         "catalog_sha256": catalog.sha256,
         "features": catalog.payload["features"],
+        "taxonomy": catalog.payload.get("taxonomy", {}),
+        "scene_presets": catalog.payload.get("scene_presets", {}),
         "models": models,
         "availability": "declared_capability",
     }

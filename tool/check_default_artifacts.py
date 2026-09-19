@@ -8,15 +8,19 @@ from pathlib import Path
 from algorithm.feature.feature_catalog import FeatureCatalog
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 9
+BUILD_VERSION = 10
 REQUIRED = (
     "rank/item/user_feature.csv", "rank/item/item_feature.csv",
     "rank/item/lr.features.json", "rank/item/fm.features.json",
+    "rank/item/lightgbm.features.json",
     "rank/user/user_feature.csv", "rank/user/lr.features.json",
-    "rank/user/fm.features.json", "rank/item/lr.pth", "rank/item/fm.pth",
+    "rank/user/fm.features.json", "rank/user/lightgbm.features.json",
+    "rank/item/lr.pth", "rank/item/fm.pth", "rank/item/lightgbm.txt",
     "rank/item/lr.manifest.json", "rank/item/fm.manifest.json",
-    "rank/user/lr.pth", "rank/user/fm.pth",
+    "rank/item/lightgbm.manifest.json",
+    "rank/user/lr.pth", "rank/user/fm.pth", "rank/user/lightgbm.txt",
     "rank/user/lr.manifest.json", "rank/user/fm.manifest.json",
+    "rank/user/lightgbm.manifest.json",
     "recall/item_cf_i2i.csv", "recall/content_i2i.csv", "recall/user_cf_u2i.csv",
     "recall/hot.csv", "recall/new.csv", "recall/item_seq_emb.csv",
 )

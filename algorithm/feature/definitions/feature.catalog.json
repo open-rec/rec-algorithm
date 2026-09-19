@@ -1,73 +1,5378 @@
 {
   "schema_version": 1,
-  "catalog_version": 3,
+  "catalog_version": 14,
   "description": "Canonical, implementation-independent features available to OpenRec rank models.",
   "policies": {
     "entity_profile_v1": {
       "as_of": "Latest entity mutation whose occurred_at is not later than the requested snapshot time.",
-      "time": {"basis": "event_time", "unit": "epoch_seconds", "timezone": "UTC"},
-      "identity": {"key": "entity id", "mutation_order": "occurred_at then business timestamp"},
-      "invalid_input": {"missing_entity_id": "reject", "missing_value": "use feature default"}
+      "time": {
+        "basis": "event_time",
+        "unit": "epoch_seconds",
+        "timezone": "UTC"
+      },
+      "identity": {
+        "key": "entity id",
+        "mutation_order": "occurred_at then business timestamp"
+      },
+      "invalid_input": {
+        "missing_entity_id": "reject",
+        "missing_value": "use feature default"
+      }
     },
     "event_behavior_v1": {
       "as_of": "Only events with event.time less than or equal to the requested snapshot time are visible.",
-      "time": {"field": "event.time", "basis": "event_time", "unit": "epoch_seconds", "timezone": "UTC", "window_boundary": "[as_of-window, as_of]"},
-      "identity": {"deduplication_key": "event.event_id", "fallback": "user_id,item_id,scene,type,time,trace_id", "trace_id_semantics": "recommendation or impression context; not an action identity", "mutation_order": "occurred_at; DELETE wins ties"},
-      "invalid_input": {"missing_user_id": "reject", "missing_item_id": "reject", "invalid_time": "reject", "invalid_numeric_value": 0, "empty_scene": "treat_as_missing"}
+      "time": {
+        "field": "event.time",
+        "basis": "event_time",
+        "unit": "epoch_seconds",
+        "timezone": "UTC",
+        "window_boundary": "[as_of-window, as_of]"
+      },
+      "identity": {
+        "deduplication_key": "event.event_id",
+        "fallback": "user_id,item_id,scene,type,time,trace_id",
+        "trace_id_semantics": "recommendation or impression context; not an action identity",
+        "mutation_order": "occurred_at; DELETE wins ties"
+      },
+      "invalid_input": {
+        "missing_user_id": "reject",
+        "missing_item_id": "reject",
+        "invalid_time": "reject",
+        "invalid_numeric_value": 0,
+        "empty_scene": "treat_as_missing"
+      }
+    },
+    "request_context_v1": {
+      "as_of": "Values known before candidate scores are produced for the current request.",
+      "time": {
+        "field": "request_time",
+        "basis": "request_time",
+        "unit": "epoch_seconds",
+        "timezone": "UTC"
+      },
+      "identity": {
+        "key": "request id plus candidate position"
+      },
+      "invalid_input": {
+        "missing_value": "use feature default"
+      },
+      "leakage": "Post-request engagement, dwell time, scrolling, and subsequent actions are forbidden."
     }
   },
   "features": [
-    {"id":"user.country","definition_version":1,"entity":"user","group":"profile","name":"country","description":"Country associated with the user at the snapshot time.","value_type":"string","shape":"categorical","source":{"logical_entity":"user","field":"country"},"policy":"entity_profile_v1","default":"","materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.city","definition_version":1,"entity":"user","group":"profile","name":"city","description":"City associated with the user at the snapshot time.","value_type":"string","shape":"categorical","source":{"logical_entity":"user","field":"city"},"policy":"entity_profile_v1","default":"","materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.gender","definition_version":1,"entity":"user","group":"profile","name":"gender","description":"User gender value supplied by the user profile.","value_type":"boolean","shape":"scalar","source":{"logical_entity":"user","field":"gender"},"policy":"entity_profile_v1","default":false,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.age","definition_version":1,"entity":"user","group":"profile","name":"age","description":"User age in years at the snapshot time.","value_type":"float64","shape":"scalar","source":{"logical_entity":"user","field":"age","unit":"years"},"policy":"entity_profile_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.tags","definition_version":1,"entity":"user","group":"profile","name":"tags","description":"Unordered set of profile tags associated with the user.","value_type":"string","shape":"multi_value","source":{"logical_entity":"user","field":"tags"},"policy":"entity_profile_v1","default":[],"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-
-    {"id":"item.title","definition_version":1,"entity":"item","group":"content","name":"title","description":"Fixed-width signed feature hashing of normalized item-title word tokens.","value_type":"string","shape":"hashed_text","hash_dim":32,"hash":"blake2b-64-signed","tokenizer":"unicode_word_lower_v1","source":{"logical_entity":"item","field":"title"},"policy":"entity_profile_v1","default":"","materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.subcategory","definition_version":1,"entity":"item","group":"content","name":"subcategory","description":"Fixed-width signed feature hashing of item subcategory tokens.","value_type":"string","shape":"hashed_text","hash_dim":8,"hash":"blake2b-64-signed","tokenizer":"unicode_word_lower_v1","source":{"logical_entity":"item","field":"subcategory"},"policy":"entity_profile_v1","default":"","materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.tags","definition_version":1,"entity":"item","group":"content","name":"tags","description":"Fixed-width signed feature hashing of item content-tag tokens.","value_type":"string","shape":"hashed_text","hash_dim":16,"hash":"blake2b-64-signed","tokenizer":"unicode_word_lower_v1","source":{"logical_entity":"item","field":"tags"},"policy":"entity_profile_v1","default":"","materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.content_age_hours","definition_version":1,"entity":"item","group":"content","name":"content_age_hours","description":"Non-negative hours between scoring time and item publication time.","value_type":"float64","shape":"scalar","source":{"logical_entity":"item","field":"pub_time","unit":"epoch_seconds"},"aggregation":{"operator":"derived","expression":"max(0, (as_of_time - pub_time) / 3600)"},"policy":"entity_profile_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-
-    {"id":"item.category","definition_version":1,"entity":"item","group":"profile","name":"category","description":"Unordered set of categories associated with the item.","value_type":"string","shape":"multi_value","source":{"logical_entity":"item","field":"category"},"policy":"entity_profile_v1","default":[],"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.scene","definition_version":1,"entity":"item","group":"profile","name":"scene","description":"Recommendation scene to which the item belongs.","value_type":"string","shape":"categorical","source":{"logical_entity":"item","field":"scene"},"policy":"entity_profile_v1","default":"","materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.weight","definition_version":1,"entity":"item","group":"profile","name":"weight","description":"Business weight assigned to the item profile.","value_type":"float64","shape":"scalar","source":{"logical_entity":"item","field":"weight"},"policy":"entity_profile_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-
-    {"id":"user.event_count","definition_version":2,"entity":"user","group":"behavior","name":"event_count","description":"Number of valid events observed for the user.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"count"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_value_sum","definition_version":2,"entity":"user","group":"behavior","name":"event_value_sum","description":"Sum of numeric event values observed for the user.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"value","group_by":"user_id"},"aggregation":{"operator":"sum"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_value_mean","definition_version":2,"entity":"user","group":"behavior","name":"event_value_mean","description":"Arithmetic mean of numeric event values observed for the user.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"value","group_by":"user_id"},"aggregation":{"operator":"mean","denominator":"event_count"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_active_days","definition_version":2,"entity":"user","group":"behavior","name":"event_active_days","description":"Distinct UTC calendar days on which the user produced a valid event.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"time","group_by":"user_id"},"aggregation":{"operator":"distinct_count","expression":"floor(time / 86400)","exact":true},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_unique_scene_count","definition_version":2,"entity":"user","group":"behavior","name":"event_unique_scene_count","description":"Number of distinct non-empty scenes in valid user events.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"scene","group_by":"user_id"},"aggregation":{"operator":"distinct_count","exact":true},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_unique_item_count","definition_version":2,"entity":"user","group":"behavior","name":"event_unique_item_count","description":"Number of distinct items in valid user events.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"item_id","group_by":"user_id"},"aggregation":{"operator":"distinct_count","exact":true},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_first_time","definition_version":2,"entity":"user","group":"behavior","name":"event_first_time","description":"Earliest valid event time observed for the user, in epoch seconds.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"time","group_by":"user_id"},"aggregation":{"operator":"min"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_last_time","definition_version":2,"entity":"user","group":"behavior","name":"event_last_time","description":"Latest valid event time visible for the user, in epoch seconds.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"time","group_by":"user_id"},"aggregation":{"operator":"max"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_recency_seconds","definition_version":2,"entity":"user","group":"behavior","name":"event_recency_seconds","description":"Non-negative seconds from snapshot time to the user's latest valid event.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"derived","expression":"max(0, as_of_time - event_last_time)"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_count_1d","definition_version":2,"entity":"user","group":"behavior","name":"event_count_1d","description":"Valid user events in the inclusive one-day event-time window.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"count","window_seconds":86400},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_count_7d","definition_version":2,"entity":"user","group":"behavior","name":"event_count_7d","description":"Valid user events in the inclusive seven-day event-time window.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"count","window_seconds":604800},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_count_30d","definition_version":2,"entity":"user","group":"behavior","name":"event_count_30d","description":"Valid user events in the inclusive thirty-day event-time window.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"count","window_seconds":2592000},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_click_count","definition_version":2,"entity":"user","group":"behavior","name":"event_click_count","description":"Number of valid click events observed for the user.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"count","filter":{"type":"click"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_expose_count","definition_version":2,"entity":"user","group":"behavior","name":"event_expose_count","description":"Number of valid expose events observed for the user.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"count","filter":{"type":"expose"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_buy_count","definition_version":2,"entity":"user","group":"behavior","name":"event_buy_count","description":"Number of valid buy events observed for the user.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"count","filter":{"type":"buy"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_collect_count","definition_version":2,"entity":"user","group":"behavior","name":"event_collect_count","description":"Number of valid collect events observed for the user.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"count","filter":{"type":"collect"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_stay_count","definition_version":2,"entity":"user","group":"behavior","name":"event_stay_count","description":"Number of valid stay events observed for the user.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"count","filter":{"type":"stay"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"user.event_click_rate","definition_version":2,"entity":"user","group":"behavior","name":"event_click_rate","description":"User click count divided by click plus expose count, or zero when the denominator is zero.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"user_id"},"aggregation":{"operator":"derived","expression":"event_click_count / (event_click_count + event_expose_count)","zero_denominator":0},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-
-    {"id":"item.event_count","definition_version":2,"entity":"item","group":"behavior","name":"event_count","description":"Number of valid events observed for the item.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"count"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_value_sum","definition_version":2,"entity":"item","group":"behavior","name":"event_value_sum","description":"Sum of numeric event values observed for the item.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"value","group_by":"item_id"},"aggregation":{"operator":"sum"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_value_mean","definition_version":2,"entity":"item","group":"behavior","name":"event_value_mean","description":"Arithmetic mean of numeric event values observed for the item.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"value","group_by":"item_id"},"aggregation":{"operator":"mean","denominator":"event_count"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_active_days","definition_version":2,"entity":"item","group":"behavior","name":"event_active_days","description":"Distinct UTC calendar days on which the item received a valid event.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"time","group_by":"item_id"},"aggregation":{"operator":"distinct_count","expression":"floor(time / 86400)","exact":true},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_unique_scene_count","definition_version":2,"entity":"item","group":"behavior","name":"event_unique_scene_count","description":"Number of distinct non-empty scenes in valid item events.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"scene","group_by":"item_id"},"aggregation":{"operator":"distinct_count","exact":true},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_unique_user_count","definition_version":2,"entity":"item","group":"behavior","name":"event_unique_user_count","description":"Number of distinct users that produced a valid event for the item.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"user_id","group_by":"item_id"},"aggregation":{"operator":"distinct_count","exact":true},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_first_time","definition_version":2,"entity":"item","group":"behavior","name":"event_first_time","description":"Earliest valid event time observed for the item, in epoch seconds.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"time","group_by":"item_id"},"aggregation":{"operator":"min"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_last_time","definition_version":2,"entity":"item","group":"behavior","name":"event_last_time","description":"Latest valid event time visible for the item, in epoch seconds.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","field":"time","group_by":"item_id"},"aggregation":{"operator":"max"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_recency_seconds","definition_version":2,"entity":"item","group":"behavior","name":"event_recency_seconds","description":"Non-negative seconds from snapshot time to the item's latest valid event.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"derived","expression":"max(0, as_of_time - event_last_time)"},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_count_1d","definition_version":2,"entity":"item","group":"behavior","name":"event_count_1d","description":"Valid item events in the inclusive one-day event-time window.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"count","window_seconds":86400},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_count_7d","definition_version":2,"entity":"item","group":"behavior","name":"event_count_7d","description":"Valid item events in the inclusive seven-day event-time window.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"count","window_seconds":604800},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_count_30d","definition_version":2,"entity":"item","group":"behavior","name":"event_count_30d","description":"Valid item events in the inclusive thirty-day event-time window.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"count","window_seconds":2592000},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_click_count","definition_version":2,"entity":"item","group":"behavior","name":"event_click_count","description":"Number of valid click events observed for the item.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"count","filter":{"type":"click"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_expose_count","definition_version":2,"entity":"item","group":"behavior","name":"event_expose_count","description":"Number of valid expose events observed for the item.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"count","filter":{"type":"expose"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_buy_count","definition_version":2,"entity":"item","group":"behavior","name":"event_buy_count","description":"Number of valid buy events observed for the item.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"count","filter":{"type":"buy"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_collect_count","definition_version":2,"entity":"item","group":"behavior","name":"event_collect_count","description":"Number of valid collect events observed for the item.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"count","filter":{"type":"collect"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_stay_count","definition_version":2,"entity":"item","group":"behavior","name":"event_stay_count","description":"Number of valid stay events observed for the item.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"count","filter":{"type":"stay"}},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"},
-    {"id":"item.event_click_rate","definition_version":2,"entity":"item","group":"behavior","name":"event_click_rate","description":"Item click count divided by click plus expose count, or zero when the denominator is zero.","value_type":"float64","shape":"scalar","source":{"logical_entity":"event","group_by":"item_id"},"aggregation":{"operator":"derived","expression":"event_click_count / (event_click_count + event_expose_count)","zero_denominator":0},"policy":"event_behavior_v1","default":0,"materialization":{"online":true,"offline":true,"backfillable":true},"status":"stable"}
-  ]
+    {
+      "id": "user.country",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "profile",
+      "name": "country",
+      "description": "Country associated with the user at the snapshot time.",
+      "value_type": "string",
+      "shape": "categorical",
+      "source": {
+        "logical_entity": "user",
+        "field": "country"
+      },
+      "policy": "entity_profile_v1",
+      "default": "",
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "attribute",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.city",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "profile",
+      "name": "city",
+      "description": "City associated with the user at the snapshot time.",
+      "value_type": "string",
+      "shape": "categorical",
+      "source": {
+        "logical_entity": "user",
+        "field": "city"
+      },
+      "policy": "entity_profile_v1",
+      "default": "",
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "attribute",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.gender",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "profile",
+      "name": "gender",
+      "description": "User gender value supplied by the user profile.",
+      "value_type": "boolean",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "user",
+        "field": "gender"
+      },
+      "policy": "entity_profile_v1",
+      "default": false,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "attribute",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.age",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "profile",
+      "name": "age",
+      "description": "User age in years at the snapshot time.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "user",
+        "field": "age",
+        "unit": "years"
+      },
+      "policy": "entity_profile_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "attribute",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.tags",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "profile",
+      "name": "tags",
+      "description": "Unordered set of profile tags associated with the user.",
+      "value_type": "string",
+      "shape": "multi_value",
+      "source": {
+        "logical_entity": "user",
+        "field": "tags"
+      },
+      "policy": "entity_profile_v1",
+      "default": [],
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "attribute",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.title",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "content",
+      "name": "title",
+      "description": "Fixed-width signed feature hashing of normalized item-title word tokens.",
+      "value_type": "string",
+      "shape": "hashed_text",
+      "hash_dim": 32,
+      "hash": "blake2b-64-signed",
+      "tokenizer": "unicode_word_lower_v1",
+      "source": {
+        "logical_entity": "item",
+        "field": "title"
+      },
+      "policy": "entity_profile_v1",
+      "default": "",
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "content",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.subcategory",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "content",
+      "name": "subcategory",
+      "description": "Fixed-width signed feature hashing of item subcategory tokens.",
+      "value_type": "string",
+      "shape": "hashed_text",
+      "hash_dim": 8,
+      "hash": "blake2b-64-signed",
+      "tokenizer": "unicode_word_lower_v1",
+      "source": {
+        "logical_entity": "item",
+        "field": "subcategory"
+      },
+      "policy": "entity_profile_v1",
+      "default": "",
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "content",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.tags",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "content",
+      "name": "tags",
+      "description": "Fixed-width signed feature hashing of item content-tag tokens.",
+      "value_type": "string",
+      "shape": "hashed_text",
+      "hash_dim": 16,
+      "hash": "blake2b-64-signed",
+      "tokenizer": "unicode_word_lower_v1",
+      "source": {
+        "logical_entity": "item",
+        "field": "tags"
+      },
+      "policy": "entity_profile_v1",
+      "default": "",
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "content",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.content_age_hours",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "content",
+      "name": "content_age_hours",
+      "description": "Non-negative hours between scoring time and item publication time.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "item",
+        "field": "pub_time",
+        "unit": "epoch_seconds"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "expression": "max(0, (as_of_time - pub_time) / 3600)"
+      },
+      "policy": "entity_profile_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.category",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "profile",
+      "name": "category",
+      "description": "Unordered set of categories associated with the item.",
+      "value_type": "string",
+      "shape": "multi_value",
+      "source": {
+        "logical_entity": "item",
+        "field": "category"
+      },
+      "policy": "entity_profile_v1",
+      "default": [],
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "attribute",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.scene",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "profile",
+      "name": "scene",
+      "description": "Recommendation scene to which the item belongs.",
+      "value_type": "string",
+      "shape": "categorical",
+      "source": {
+        "logical_entity": "item",
+        "field": "scene"
+      },
+      "policy": "entity_profile_v1",
+      "default": "",
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "contextual",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.weight",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "profile",
+      "name": "weight",
+      "description": "Business weight assigned to the item profile.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "item",
+        "field": "weight"
+      },
+      "policy": "entity_profile_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "attribute",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_count",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_count",
+      "description": "Number of valid events observed for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_value_sum",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_value_sum",
+      "description": "Sum of numeric event values observed for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "sum"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_value_mean",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_value_mean",
+      "description": "Arithmetic mean of numeric event values observed for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "mean",
+        "denominator": "event_count"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_active_days",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_active_days",
+      "description": "Distinct UTC calendar days on which the user produced a valid event.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "distinct_count",
+        "expression": "floor(time / 86400)",
+        "exact": true
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_unique_scene_count",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_unique_scene_count",
+      "description": "Number of distinct non-empty scenes in valid user events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "scene",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "distinct_count",
+        "exact": true
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_unique_item_count",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_unique_item_count",
+      "description": "Number of distinct items in valid user events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "item_id",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "distinct_count",
+        "exact": true
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_first_time",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_first_time",
+      "description": "Earliest valid event time observed for the user, in epoch seconds.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "min"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_last_time",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_last_time",
+      "description": "Latest valid event time visible for the user, in epoch seconds.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "max"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_recency_seconds",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_recency_seconds",
+      "description": "Non-negative seconds from snapshot time to the user's latest valid event.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "expression": "max(0, as_of_time - event_last_time)"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_count_1d",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_count_1d",
+      "description": "Valid user events in the inclusive one-day event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_count_7d",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_count_7d",
+      "description": "Valid user events in the inclusive seven-day event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_count_30d",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_count_30d",
+      "description": "Valid user events in the inclusive thirty-day event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_click_count",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_click_count",
+      "description": "Number of valid click events observed for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "click"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_expose_count",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_expose_count",
+      "description": "Number of valid expose events observed for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_buy_count",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_count",
+      "description": "Number of valid buy events observed for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "buy"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_collect_count",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_collect_count",
+      "description": "Number of valid collect events observed for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "collect"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_stay_count",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_stay_count",
+      "description": "Number of valid stay events observed for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "stay"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_click_rate",
+      "definition_version": 2,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_click_rate",
+      "description": "User click count divided by click plus expose count, or zero when the denominator is zero.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "expression": "event_click_count / (event_click_count + event_expose_count)",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_count",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_count",
+      "description": "Number of valid events observed for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_value_sum",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_value_sum",
+      "description": "Sum of numeric event values observed for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "sum"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_value_mean",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_value_mean",
+      "description": "Arithmetic mean of numeric event values observed for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "mean",
+        "denominator": "event_count"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_active_days",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_active_days",
+      "description": "Distinct UTC calendar days on which the item received a valid event.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "time",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "distinct_count",
+        "expression": "floor(time / 86400)",
+        "exact": true
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_unique_scene_count",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_unique_scene_count",
+      "description": "Number of distinct non-empty scenes in valid item events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "scene",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "distinct_count",
+        "exact": true
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_unique_user_count",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_unique_user_count",
+      "description": "Number of distinct users that produced a valid event for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "user_id",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "distinct_count",
+        "exact": true
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_first_time",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_first_time",
+      "description": "Earliest valid event time observed for the item, in epoch seconds.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "time",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "min"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.event_last_time",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_last_time",
+      "description": "Latest valid event time visible for the item, in epoch seconds.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "time",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "max"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.event_recency_seconds",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_recency_seconds",
+      "description": "Non-negative seconds from snapshot time to the item's latest valid event.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "expression": "max(0, as_of_time - event_last_time)"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.event_count_1d",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_count_1d",
+      "description": "Valid item events in the inclusive one-day event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.event_count_7d",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_count_7d",
+      "description": "Valid item events in the inclusive seven-day event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.event_count_30d",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_count_30d",
+      "description": "Valid item events in the inclusive thirty-day event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed"
+      ]
+    },
+    {
+      "id": "item.event_click_count",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_click_count",
+      "description": "Number of valid click events observed for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "click"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_expose_count",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_expose_count",
+      "description": "Number of valid expose events observed for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_buy_count",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_buy_count",
+      "description": "Number of valid buy events observed for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "buy"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_collect_count",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_collect_count",
+      "description": "Number of valid collect events observed for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "collect"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_stay_count",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_stay_count",
+      "description": "Number of valid stay events observed for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "stay"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_click_rate",
+      "definition_version": 2,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_click_rate",
+      "description": "Item click count divided by click plus expose count, or zero when the denominator is zero.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "expression": "event_click_count / (event_click_count + event_expose_count)",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "context.candidate_position",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "candidate_position",
+      "description": "Candidate zero-based position before ranking.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request",
+        "field": "candidate_position"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_count",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "candidate_count",
+      "description": "Number of candidates supplied to the ranking request.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request",
+        "field": "candidate_count"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.position_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "position_ratio",
+      "description": "Candidate position divided by the nonzero candidate count.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request",
+        "field": "position_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.request_hour_sin",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "request_hour_sin",
+      "description": "Sine encoding of the UTC request hour.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request",
+        "field": "request_hour_sin"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.request_hour_cos",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "request_hour_cos",
+      "description": "Cosine encoding of the UTC request hour.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request",
+        "field": "request_hour_cos"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.request_weekday_sin",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "request_weekday_sin",
+      "description": "Sine encoding of the UTC request weekday.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request",
+        "field": "request_weekday_sin"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.request_weekday_cos",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "request_weekday_cos",
+      "description": "Cosine encoding of the UTC request weekday.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request",
+        "field": "request_weekday_cos"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.device_type",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "device_type",
+      "description": "Coarse device class supplied with the ranking request.",
+      "value_type": "string",
+      "shape": "categorical",
+      "source": {
+        "logical_entity": "request",
+        "field": "device_type"
+      },
+      "policy": "request_context_v1",
+      "default": "",
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.is_subscriber",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "is_subscriber",
+      "description": "Whether the requesting user has an active subscription.",
+      "value_type": "boolean",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request",
+        "field": "is_subscriber"
+      },
+      "policy": "request_context_v1",
+      "default": false,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.is_authenticated",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request",
+      "name": "is_authenticated",
+      "description": "Whether the request belongs to an authenticated user.",
+      "value_type": "boolean",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request",
+        "field": "is_authenticated"
+      },
+      "policy": "request_context_v1",
+      "default": false,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": false
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_category_click_count_log",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "affinity",
+      "name": "user_category_click_count_log",
+      "description": "Log-transformed visible clicks by the user on the candidate category.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "user_id",
+          "candidate_attribute"
+        ]
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_category_click_share",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "affinity",
+      "name": "user_category_click_share",
+      "description": "Share of visible user clicks belonging to the candidate category.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "user_id",
+          "candidate_attribute"
+        ]
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_category_recency_hours_log",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "affinity",
+      "name": "user_category_recency_hours_log",
+      "description": "Log hours since the latest visible click in the candidate category.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "user_id",
+          "candidate_attribute"
+        ]
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_item_click_count_log",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "affinity",
+      "name": "user_item_click_count_log",
+      "description": "Log-transformed visible user clicks on the candidate item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "user_id",
+          "candidate_attribute"
+        ]
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "temporal.candidate_age_hours_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request_candidate",
+      "name": "candidate_age_hours_log",
+      "description": "Log hours between request time and candidate publication.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request_candidate",
+        "fields": [
+          "request_time",
+          "pub_time",
+          "candidate_set"
+        ]
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "temporal.freshness_rank_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request_candidate",
+      "name": "freshness_rank_ratio",
+      "description": "Candidate freshness rank normalized within the current request.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request_candidate",
+        "fields": [
+          "request_time",
+          "pub_time",
+          "candidate_set"
+        ]
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "temporal.hours_from_freshest_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request_candidate",
+      "name": "hours_from_freshest_log",
+      "description": "Log hour gap from the freshest candidate in the request.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request_candidate",
+        "fields": [
+          "request_time",
+          "pub_time",
+          "candidate_set"
+        ]
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "temporal.published_within_24h",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "request_candidate",
+      "name": "published_within_24h",
+      "description": "Whether the candidate was published within twenty-four hours.",
+      "value_type": "boolean",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "request_candidate",
+        "fields": [
+          "request_time",
+          "pub_time",
+          "candidate_set"
+        ]
+      },
+      "policy": "request_context_v1",
+      "default": false,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_click_count_log",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "experiment",
+      "name": "user_click_count_log",
+      "description": "Causal statistical feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_click_count_log"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_active_days_log",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "experiment",
+      "name": "user_active_days_log",
+      "description": "Causal statistical feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_active_days_log"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_unique_items_log",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "experiment",
+      "name": "user_unique_items_log",
+      "description": "Causal statistical feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_unique_items_log"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_unique_categories_log",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "experiment",
+      "name": "user_unique_categories_log",
+      "description": "Causal statistical feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_unique_categories_log"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_consumed_age_mean_log",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "experiment",
+      "name": "user_consumed_age_mean_log",
+      "description": "Causal statistical feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_consumed_age_mean_log"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_consumed_age_std_log",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "experiment",
+      "name": "user_consumed_age_std_log",
+      "description": "Causal statistical feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_consumed_age_std_log"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_fresh_click_share",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "experiment",
+      "name": "user_fresh_click_share",
+      "description": "Causal statistical feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_fresh_click_share"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_repeat_click_share",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "experiment",
+      "name": "user_repeat_click_share",
+      "description": "Causal statistical feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_repeat_click_share"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "temporal.user_last_click_recency_hours_log",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "experiment",
+      "name": "user_last_click_recency_hours_log",
+      "description": "Causal temporal feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_last_click_recency_hours_log"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_topic_overlap_count",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "experiment",
+      "name": "user_topic_overlap_count",
+      "description": "Causal interaction feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_topic_overlap_count"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_topic_overlap_ratio",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "experiment",
+      "name": "user_topic_overlap_ratio",
+      "description": "Causal interaction feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_topic_overlap_ratio"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_topic_click_count_log",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "experiment",
+      "name": "user_topic_click_count_log",
+      "description": "Causal interaction feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_topic_click_count_log"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_topic_click_share",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "experiment",
+      "name": "user_topic_click_share",
+      "description": "Causal interaction feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_topic_click_share"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_entity_overlap_count",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "experiment",
+      "name": "user_entity_overlap_count",
+      "description": "Causal interaction feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_entity_overlap_count"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_entity_overlap_ratio",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "experiment",
+      "name": "user_entity_overlap_ratio",
+      "description": "Causal interaction feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_entity_overlap_ratio"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_entity_click_count_log",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "experiment",
+      "name": "user_entity_click_count_log",
+      "description": "Causal interaction feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_entity_click_count_log"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.user_entity_click_share",
+      "definition_version": 1,
+      "entity": "interaction",
+      "group": "experiment",
+      "name": "user_entity_click_share",
+      "description": "Causal interaction feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_entity_click_share"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.item_event_count_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "item_event_count_rank_pct",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "item_event_count_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.item_event_count_minus_request_mean",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "item_event_count_minus_request_mean",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "item_event_count_minus_request_mean"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.item_event_click_rate_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "item_event_click_rate_rank_pct",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "item_event_click_rate_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.item_event_click_rate_minus_request_mean",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "item_event_click_rate_minus_request_mean",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "item_event_click_rate_minus_request_mean"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.user_category_affinity_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_category_affinity_rank_pct",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_category_affinity_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.user_category_affinity_minus_request_mean",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_category_affinity_minus_request_mean",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_category_affinity_minus_request_mean"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.user_item_history_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_item_history_rank_pct",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_item_history_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.user_item_history_minus_request_mean",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_item_history_minus_request_mean",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_item_history_minus_request_mean"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.user_topic_affinity_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_topic_affinity_rank_pct",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_topic_affinity_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.user_topic_affinity_minus_request_mean",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_topic_affinity_minus_request_mean",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_topic_affinity_minus_request_mean"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.user_entity_affinity_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_entity_affinity_rank_pct",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_entity_affinity_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.user_entity_affinity_minus_request_mean",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_entity_affinity_minus_request_mean",
+      "description": "Causal contextual feature validated by the EB-NeRD feature-family ablation.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_entity_affinity_minus_request_mean"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_impression_count_1h_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_impression_count_1h_log",
+      "description": "Log-scaled user impression count in the preceding hour.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_impression_count_1h_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_impression_count_24h_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_impression_count_24h_log",
+      "description": "Log-scaled user impression count in the preceding 24 hours.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_impression_count_24h_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "temporal.user_previous_impression_minutes_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_previous_impression_minutes_log",
+      "description": "Log-scaled minutes since the user previous impression.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "user_previous_impression_minutes_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "temporal",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.candidate_seen_previous_1",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_seen_previous_1",
+      "description": "Whether the candidate appeared in the user previous impression.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "candidate_seen_previous_1"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.candidate_seen_previous_2",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_seen_previous_2",
+      "description": "Whether the candidate appeared in the user previous two impressions.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "candidate_seen_previous_2"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.candidate_seen_previous_5",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_seen_previous_5",
+      "description": "Whether the candidate appeared in the user previous five impressions.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "candidate_seen_previous_5"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.candidate_seen_previous_10",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_seen_previous_10",
+      "description": "Whether the candidate appeared in the user previous ten impressions.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "candidate_seen_previous_10"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.candidate_seen_previous_20",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_seen_previous_20",
+      "description": "Whether the candidate appeared in the user previous twenty impressions.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_or_request",
+        "field": "candidate_seen_previous_20"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.user_fixed_history_length_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "user_fixed_history_length_log",
+      "description": "Log-scaled length of the request-time user history snapshot.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "user_history_snapshot",
+        "field": "user_fixed_history_length_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.candidate_fixed_history_count_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_fixed_history_count_log",
+      "description": "Log-scaled candidate occurrence count in the request-time history snapshot.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "user_history_snapshot",
+        "field": "candidate_fixed_history_count_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.candidate_fixed_history_recency_reciprocal",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_fixed_history_recency_reciprocal",
+      "description": "Reciprocal positional recency of the candidate in the request-time history snapshot.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "user_history_snapshot",
+        "field": "candidate_fixed_history_recency_reciprocal"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.fixed_history_category_count_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "fixed_history_category_count_log",
+      "description": "Log-scaled count of history items matching the candidate category.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "user_history_snapshot",
+        "field": "fixed_history_category_count_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.fixed_history_category_share",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "fixed_history_category_share",
+      "description": "Share of history items matching the candidate category.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "user_history_snapshot",
+        "field": "fixed_history_category_share"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.fixed_history_topic_count_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "fixed_history_topic_count_log",
+      "description": "Log-scaled history topic occurrences matching candidate topics.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "user_history_snapshot",
+        "field": "fixed_history_topic_count_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "interaction.fixed_history_topic_share",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "fixed_history_topic_share",
+      "description": "Share of history topic occurrences matching candidate topics.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "user_history_snapshot",
+        "field": "fixed_history_topic_share"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "interaction",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_global_5m_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_5m_log",
+      "description": "Log-scaled causal past candidate exposure for global_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_5m_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_5m_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_5m_ratio",
+      "description": "Within-request share of causal past candidate exposure for global_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_5m_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_5m_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_5m_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate exposure for global_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_5m_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_global_1h_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_1h_log",
+      "description": "Log-scaled causal past candidate exposure for global_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_1h_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_1h_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_1h_ratio",
+      "description": "Within-request share of causal past candidate exposure for global_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_1h_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_1h_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_1h_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate exposure for global_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_1h_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_global_24h_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_24h_log",
+      "description": "Log-scaled causal past candidate exposure for global_24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_24h_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_24h_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_24h_ratio",
+      "description": "Within-request share of causal past candidate exposure for global_24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_24h_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_24h_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_24h_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate exposure for global_24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_24h_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_global_all_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_all_log",
+      "description": "Log-scaled causal past candidate exposure for global_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_all_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_all_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_all_ratio",
+      "description": "Within-request share of causal past candidate exposure for global_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_all_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_all_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_all_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate exposure for global_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_all_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_user_5m_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_5m_log",
+      "description": "Log-scaled causal past candidate exposure for user_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_5m_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_5m_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_5m_ratio",
+      "description": "Within-request share of causal past candidate exposure for user_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_5m_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_5m_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_5m_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate exposure for user_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_5m_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_user_1h_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_1h_log",
+      "description": "Log-scaled causal past candidate exposure for user_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_1h_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_1h_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_1h_ratio",
+      "description": "Within-request share of causal past candidate exposure for user_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_1h_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_1h_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_1h_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate exposure for user_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_1h_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_user_24h_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_24h_log",
+      "description": "Log-scaled causal past candidate exposure for user_24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_24h_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_24h_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_24h_ratio",
+      "description": "Within-request share of causal past candidate exposure for user_24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_24h_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_24h_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_24h_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate exposure for user_24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_24h_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_user_all_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_all_log",
+      "description": "Log-scaled causal past candidate exposure for user_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_all_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_all_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_all_ratio",
+      "description": "Within-request share of causal past candidate exposure for user_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_all_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_all_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_all_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate exposure for user_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_all_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_engagement_global_5m_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_global_5m_log",
+      "description": "Log-scaled causal past candidate engagement for global_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_global_5m_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_global_5m_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_global_5m_ratio",
+      "description": "Within-request share of causal past candidate engagement for global_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_global_5m_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_global_5m_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_global_5m_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate engagement for global_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_global_5m_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_engagement_global_1h_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_global_1h_log",
+      "description": "Log-scaled causal past candidate engagement for global_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_global_1h_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_global_1h_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_global_1h_ratio",
+      "description": "Within-request share of causal past candidate engagement for global_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_global_1h_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_global_1h_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_global_1h_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate engagement for global_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_global_1h_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_engagement_global_all_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_global_all_log",
+      "description": "Log-scaled causal past candidate engagement for global_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_global_all_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_global_all_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_global_all_ratio",
+      "description": "Within-request share of causal past candidate engagement for global_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_global_all_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_global_all_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_global_all_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate engagement for global_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_global_all_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_engagement_user_5m_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_user_5m_log",
+      "description": "Log-scaled causal past candidate engagement for user_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_user_5m_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_user_5m_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_user_5m_ratio",
+      "description": "Within-request share of causal past candidate engagement for user_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_user_5m_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_user_5m_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_user_5m_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate engagement for user_5m.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_user_5m_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_engagement_user_1h_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_user_1h_log",
+      "description": "Log-scaled causal past candidate engagement for user_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_user_1h_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_user_1h_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_user_1h_ratio",
+      "description": "Within-request share of causal past candidate engagement for user_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_user_1h_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_user_1h_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_user_1h_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate engagement for user_1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_user_1h_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_engagement_user_all_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_user_all_log",
+      "description": "Log-scaled causal past candidate engagement for user_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_user_all_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_user_all_ratio",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_user_all_ratio",
+      "description": "Within-request share of causal past candidate engagement for user_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_user_all_ratio"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_engagement_user_all_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_engagement_user_all_rank_pct",
+      "description": "Within-request percentile rank of causal past candidate engagement for user_all.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_engagement_user_all_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_global_5m_1h_momentum_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_5m_1h_momentum_log",
+      "description": "Log-scaled causal global candidate exposure momentum from 5m to 1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_5m_1h_momentum_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_5m_1h_momentum_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_5m_1h_momentum_rank_pct",
+      "description": "Within-request rank of causal global candidate exposure momentum from 5m to 1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_5m_1h_momentum_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_global_1h_24h_momentum_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_1h_24h_momentum_log",
+      "description": "Log-scaled causal global candidate exposure momentum from 1h to 24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_1h_24h_momentum_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_global_1h_24h_momentum_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_global_1h_24h_momentum_rank_pct",
+      "description": "Within-request rank of causal global candidate exposure momentum from 1h to 24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_global_1h_24h_momentum_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_user_5m_1h_momentum_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_5m_1h_momentum_log",
+      "description": "Log-scaled causal user candidate exposure momentum from 5m to 1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_5m_1h_momentum_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_5m_1h_momentum_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_5m_1h_momentum_rank_pct",
+      "description": "Within-request rank of causal user candidate exposure momentum from 5m to 1h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_5m_1h_momentum_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "statistical.candidate_past_exposure_user_1h_24h_momentum_log",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_1h_24h_momentum_log",
+      "description": "Log-scaled causal user candidate exposure momentum from 1h to 24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_1h_24h_momentum_log"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "statistical",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "context.candidate_past_exposure_user_1h_24h_momentum_rank_pct",
+      "definition_version": 1,
+      "entity": "context",
+      "group": "experiment",
+      "name": "candidate_past_exposure_user_1h_24h_momentum_rank_pct",
+      "description": "Within-request rank of causal user candidate exposure momentum from 1h to 24h.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "past_impression_state",
+        "field": "candidate_past_exposure_user_1h_24h_momentum_rank_pct"
+      },
+      "policy": "request_context_v1",
+      "default": 0,
+      "materialization": {
+        "online": false,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "experimental",
+      "family": "contextual",
+      "scenes": [
+        "all",
+        "news",
+        "feed",
+        "video",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_expose_count_5m",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_expose_count_5m",
+      "description": "Inclusive 5m exposure events for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "type",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 300,
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_value_sum_5m",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_value_sum_5m",
+      "description": "Inclusive 5m numeric event value for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "sum",
+        "window_seconds": 300
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_expose_count_1h",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_expose_count_1h",
+      "description": "Inclusive 1h exposure events for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "type",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 3600,
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_value_sum_1h",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_value_sum_1h",
+      "description": "Inclusive 1h numeric event value for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "sum",
+        "window_seconds": 3600
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_expose_count_24h",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_expose_count_24h",
+      "description": "Inclusive 24h exposure events for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "type",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 86400,
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_value_sum_24h",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_value_sum_24h",
+      "description": "Inclusive 24h numeric event value for the user.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "sum",
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_expose_count_5m",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_expose_count_5m",
+      "description": "Inclusive 5m exposure events for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "type",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 300,
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_value_sum_5m",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_value_sum_5m",
+      "description": "Inclusive 5m numeric event value for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "sum",
+        "window_seconds": 300
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_expose_count_1h",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_expose_count_1h",
+      "description": "Inclusive 1h exposure events for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "type",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 3600,
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_value_sum_1h",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_value_sum_1h",
+      "description": "Inclusive 1h numeric event value for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "sum",
+        "window_seconds": 3600
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_expose_count_24h",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_expose_count_24h",
+      "description": "Inclusive 24h exposure events for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "type",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 86400,
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_value_sum_24h",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_value_sum_24h",
+      "description": "Inclusive 24h numeric event value for the item.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "sum",
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    }
+  ],
+  "taxonomy": {
+    "families": [
+      {
+        "id": "attribute",
+        "label": "Attributes",
+        "description": "Relatively stable user and item profile values."
+      },
+      {
+        "id": "content",
+        "label": "Content",
+        "description": "Text, taxonomy, and other item content representations."
+      },
+      {
+        "id": "statistical",
+        "label": "Statistics",
+        "description": "Historical counts, rates, sums, means, and cardinalities."
+      },
+      {
+        "id": "temporal",
+        "label": "Temporal",
+        "description": "Freshness, recency, event time, and time-window aggregates."
+      },
+      {
+        "id": "contextual",
+        "label": "Context",
+        "description": "Request, placement, and recommendation-scene context."
+      },
+      {
+        "id": "interaction",
+        "label": "Interactions",
+        "description": "User-item and feature-cross signals."
+      }
+    ],
+    "scenes": [
+      {
+        "id": "all",
+        "label": "All scenes"
+      },
+      {
+        "id": "news",
+        "label": "News"
+      },
+      {
+        "id": "feed",
+        "label": "Feed"
+      },
+      {
+        "id": "video",
+        "label": "Video"
+      },
+      {
+        "id": "ecommerce",
+        "label": "E-commerce"
+      }
+    ]
+  },
+  "scene_presets": {
+    "general": {
+      "label": "General ranking",
+      "families": [
+        "attribute",
+        "content",
+        "statistical",
+        "temporal",
+        "contextual"
+      ]
+    },
+    "news": {
+      "label": "News ranking",
+      "families": [
+        "attribute",
+        "content",
+        "statistical",
+        "temporal",
+        "contextual",
+        "interaction"
+      ]
+    }
+  }
 }

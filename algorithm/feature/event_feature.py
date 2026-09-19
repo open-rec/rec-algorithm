@@ -17,15 +17,19 @@ def _behavior_contract():
     catalog = FeatureCatalog.load()
     definitions = [value for value in catalog.features.values()
                    if value.get("entity") == "user" and value.get("group") == "behavior"]
-    windows = sorted({int(value["aggregation"]["window_seconds"] / DAY_SECONDS)
-                      for value in definitions
-                      if value.get("aggregation", {}).get("window_seconds")})
-    event_types = [value["aggregation"]["filter"]["type"] for value in definitions
-                   if value.get("aggregation", {}).get("filter")]
-    return tuple(event_types), tuple(windows)
+    window_features = tuple(
+        (value["name"], value["aggregation"])
+        for value in definitions
+        if value.get("aggregation", {}).get("window_seconds")
+    )
+    event_types = dict.fromkeys(
+        value["aggregation"]["filter"]["type"] for value in definitions
+        if value.get("aggregation", {}).get("filter")
+    )
+    return tuple(event_types), window_features
 
 
-DEFAULT_EVENT_TYPES, WINDOW_DAYS = _behavior_contract()
+DEFAULT_EVENT_TYPES, WINDOW_FEATURES = _behavior_contract()
 
 
 def event_feature_columns(counterpart_name, event_types=DEFAULT_EVENT_TYPES):
@@ -34,7 +38,7 @@ def event_feature_columns(counterpart_name, event_types=DEFAULT_EVENT_TYPES):
         "event_unique_scene_count", f"event_unique_{counterpart_name}_count",
         "event_first_time", "event_last_time", "event_recency_seconds",
     ]
-    columns.extend(f"event_count_{days}d" for days in WINDOW_DAYS)
+    columns.extend(name for name, _ in WINDOW_FEATURES)
     columns.extend(f"event_{event_type}_count" for event_type in event_types)
     columns.append("event_click_rate")
     return columns
@@ -100,9 +104,16 @@ def aggregate_event_features(events, entity="user", as_of_time=None,
         result[f"event_unique_{counterpart}_count"] = 0
     result["event_recency_seconds"] = snapshot - result["event_last_time"]
 
-    for days in WINDOW_DAYS:
-        recent = frame[frame["time"] >= snapshot - days * DAY_SECONDS]
-        result[f"event_count_{days}d"] = recent.groupby(key).size().reindex(result.index, fill_value=0)
+    for name, aggregation in WINDOW_FEATURES:
+        recent = frame[frame["time"] >= snapshot - aggregation["window_seconds"]]
+        event_filter = aggregation.get("filter", {}).get("type")
+        if event_filter is not None:
+            recent = recent[recent.get("type", "") == event_filter]
+        if aggregation["operator"] == "sum":
+            values = recent.groupby(key)["value_num"].sum()
+        else:
+            values = recent.groupby(key).size()
+        result[name] = values.reindex(result.index, fill_value=0)
 
     event_type = frame.get("type", pd.Series("", index=frame.index)).fillna("").astype(str)
     for name in event_types:
