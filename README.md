@@ -191,7 +191,10 @@ compatible with online inference.
 Build arguments `TRAINING_BASE_IMAGE` and `TRAINING_PIP_INDEX_URL` select the
 independent PyTorch base and package mirror. Compose exposes these as
 `RANK_TRAINING_BASE_IMAGE` and `RANK_TRAINING_PIP_INDEX_URL`; `--local` in example
-uses the local PyTorch image. `RANK_TRAINING_PYTHON` selects the trainer interpreter
+uses a separate PyTorch 2.8 / CUDA 12.9 training image and the local pip mirror.
+The training base must provide `/opt/conda` for copying into Spark; the PyTorch 2.10
+serving image uses system Python and cannot be substituted for this stage.
+`RANK_TRAINING_PYTHON` selects the trainer interpreter
 (default `/opt/conda/bin/python`), `RANK_TRAINING_THREADS=2` limits CPU threads, and
 `RANK_RUNNER_CPUS=4` / `RANK_RUNNER_MEMORY=8g` limit the offline runner container.
 Training dependencies are in `requirements-training.txt`; torch comes from the
