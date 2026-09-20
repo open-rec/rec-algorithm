@@ -156,7 +156,13 @@ def test_label_population_uses_fixed_observation_cutoff_and_delete_wins_tie(spar
     assert [row.asDict() for row in actual] == [{"event_id": "e1", "type": "click"}]
 
 
-def test_spark_materializes_aligned_point_in_time_features(spark):
+@pytest.mark.parametrize("publication,expected_ages", [
+    ("missing", [0.0, 0.0]),
+    (None, [0.0, 0.0]),
+    (50, [50 / 3600, 150 / 3600]),
+    (250, [0.0, 0.0]),
+])
+def test_spark_materializes_aligned_point_in_time_features(spark, publication, expected_ages):
     labels = spark.createDataFrame([
         ("l1", "u", "i", "s", "expose", 100, "x1"),
         ("l2", "u", "i", "s", "click", 200, "x2"),
@@ -173,6 +179,9 @@ def test_spark_materializes_aligned_point_in_time_features(spark):
     items = spark.createDataFrame([
         ("i", "s", 1.0, "INSERT", 10, 10, "d1"),
     ], ["id", "scene", "weight", "_operation", "_mutation_time", "_effective_time", "dt"])
+    if publication != "missing":
+        from pyspark.sql import functions as F
+        items = items.withColumn("pub_time", F.lit(publication).cast("long"))
 
     out_labels, out_users, out_items = materialize_point_in_time_samples_spark(
         labels, history, users, items)
@@ -181,4 +190,6 @@ def test_spark_materializes_aligned_point_in_time_features(spark):
     first, second = user_rows["l1"], user_rows["l2"]
     assert (first.city, first.event_count) == ("old", 1.0)
     assert (second.city, second.event_count) == ("new", 2.0)
-    assert sorted(row.event_count for row in out_items.collect()) == [1.0, 2.0]
+    item_rows = sorted(out_items.collect(), key=lambda row: row._sample_id)
+    assert [row.event_count for row in item_rows] == [1.0, 2.0]
+    assert [row.content_age_hours for row in item_rows] == pytest.approx(expected_ages)

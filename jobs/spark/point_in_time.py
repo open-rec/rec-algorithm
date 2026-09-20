@@ -104,6 +104,10 @@ def materialize_point_in_time_samples_spark(labels, event_history, user_history,
                              "item_id" if target_type == "user" else "user_id")
     if target_type == "item":
         label_times = prepared.select("_sample_id", "_label_time")
+        # coalesce handles null values, but Spark still resolves every column
+        # reference. Legacy/minimal item histories may omit pub_time entirely.
+        published_time = (F.col("pub_time") if "pub_time" in candidate_rows.columns
+                          else F.lit(None).cast("long"))
         candidate_rows = candidate_rows.join(label_times, "_sample_id", "left") \
             .withColumn(
                 "content_age_hours",
@@ -111,7 +115,7 @@ def materialize_point_in_time_samples_spark(labels, event_history, user_history,
                     F.lit(0.0),
                     (
                         F.col("_label_time")
-                        - F.coalesce(F.col("pub_time"), F.col("_label_time"))
+                        - F.coalesce(published_time, F.col("_label_time"))
                     )
                     / F.lit(3600.0),
                 ),
