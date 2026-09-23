@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from algorithm.feature.event_feature import aggregate_event_features, enrich_entity_features
+from algorithm.feature.commerce_feature import aggregate_user_commerce_features
 from algorithm.feature.point_in_time import resolve_event_mutations_as_of
 
 
@@ -27,6 +28,10 @@ def test_user_event_aggregation_respects_snapshot_and_counts_types():
     assert row.event_click_count == 1
     assert row.event_expose_count == 1
     assert row.event_click_rate == 0.5
+    assert row.event_ctr == 1.0
+    assert row.event_buy_per_click == 1.0
+    assert row.event_buy_per_collect == 0.0
+    assert row.event_ctr_1d == 1.0
     assert row.event_recency_seconds == 100
     assert row.event_expose_count_5m == 1
     assert row.event_expose_count_1h == 1
@@ -79,6 +84,25 @@ def test_trace_context_keeps_distinct_expose_and_click_actions():
     assert row.event_count == 2
     assert row.event_expose_count == 1
     assert row.event_click_count == 1
+    assert row.event_ctr == 1.0
+
+
+def test_conversion_rates_use_action_denominators_and_windows():
+    events = pd.DataFrame([
+        {"user_id": "u", "item_id": "i1", "type": "expose", "time": 1},
+        {"user_id": "u", "item_id": "i1", "type": "expose", "time": 2},
+        {"user_id": "u", "item_id": "i1", "type": "click", "time": 3},
+        {"user_id": "u", "item_id": "i1", "type": "collect", "time": 4},
+        {"user_id": "u", "item_id": "i1", "type": "buy", "time": 5},
+        {"user_id": "u", "item_id": "i2", "type": "expose", "time": 200000},
+    ])
+    row = aggregate_event_features(events, "user", 200000).iloc[0]
+    assert row.event_ctr == 1 / 3
+    assert row.event_collect_per_click == 1.0
+    assert row.event_buy_per_click == 1.0
+    assert row.event_buy_per_collect == 1.0
+    assert row.event_ctr_1d == 0.0
+    assert row.event_buy_per_click_1d == 0.0
 
 
 def test_shared_java_python_golden_fixture():
@@ -87,7 +111,12 @@ def test_shared_java_python_golden_fixture():
     events = resolve_event_mutations_as_of(pd.DataFrame(fixture["events"]), 10000)
     row = aggregate_event_features(events, "user",
                                    fixture["as_of_time"]).iloc[0]
+    commerce = aggregate_user_commerce_features(
+        events, pd.DataFrame(), fixture["as_of_time"]).iloc[0]
+    row = pd.concat((row, commerce.drop(labels=["user_id"])))
     for name, expected in fixture["expected_user"].items():
+        assert row[name] == expected
+    for name, expected in fixture["expected_user_strings"].items():
         assert row[name] == expected
     items = aggregate_event_features(events, "item",
                                      fixture["as_of_time"]).set_index("item_id")

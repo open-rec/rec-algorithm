@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_version": 14,
+  "catalog_version": 17,
   "description": "Canonical, implementation-independent features available to OpenRec rank models.",
   "policies": {
     "entity_profile_v1": {
@@ -5293,6 +5293,1700 @@
       "family": "temporal",
       "scenes": [
         "all"
+      ]
+    },
+    {
+      "id": "user.event_ctr",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_ctr",
+      "description": "Click events divided by expose events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_ctr_1d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_ctr_1d",
+      "description": "Click events divided by expose events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_ctr_7d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_ctr_7d",
+      "description": "Click events divided by expose events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_ctr_30d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_ctr_30d",
+      "description": "Click events divided by expose events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_collect_per_click",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_collect_per_click",
+      "description": "Collect events divided by click events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_collect_per_click_1d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_collect_per_click_1d",
+      "description": "Collect events divided by click events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_collect_per_click_7d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_collect_per_click_7d",
+      "description": "Collect events divided by click events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_collect_per_click_30d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_collect_per_click_30d",
+      "description": "Collect events divided by click events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_buy_per_click",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_per_click",
+      "description": "Buy events divided by click events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_buy_per_click_1d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_per_click_1d",
+      "description": "Buy events divided by click events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_buy_per_click_7d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_per_click_7d",
+      "description": "Buy events divided by click events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_buy_per_click_30d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_per_click_30d",
+      "description": "Buy events divided by click events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_buy_per_collect",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_per_collect",
+      "description": "Buy events divided by collect events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_buy_per_collect_1d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_per_collect_1d",
+      "description": "Buy events divided by collect events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_buy_per_collect_7d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_per_collect_7d",
+      "description": "Buy events divided by collect events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.event_buy_per_collect_30d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_per_collect_30d",
+      "description": "Buy events divided by collect events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_ctr",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_ctr",
+      "description": "Click events divided by expose events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_ctr_1d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_ctr_1d",
+      "description": "Click events divided by expose events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_ctr_7d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_ctr_7d",
+      "description": "Click events divided by expose events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_ctr_30d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_ctr_30d",
+      "description": "Click events divided by expose events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_collect_per_click",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_collect_per_click",
+      "description": "Collect events divided by click events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_collect_per_click_1d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_collect_per_click_1d",
+      "description": "Collect events divided by click events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_collect_per_click_7d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_collect_per_click_7d",
+      "description": "Collect events divided by click events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_collect_per_click_30d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_collect_per_click_30d",
+      "description": "Collect events divided by click events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_buy_per_click",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_buy_per_click",
+      "description": "Buy events divided by click events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_buy_per_click_1d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_buy_per_click_1d",
+      "description": "Buy events divided by click events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_buy_per_click_7d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_buy_per_click_7d",
+      "description": "Buy events divided by click events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_buy_per_click_30d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_buy_per_click_30d",
+      "description": "Buy events divided by click events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_buy_per_collect",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_buy_per_collect",
+      "description": "Buy events divided by collect events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_buy_per_collect_1d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_buy_per_collect_1d",
+      "description": "Buy events divided by collect events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_buy_per_collect_7d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_buy_per_collect_7d",
+      "description": "Buy events divided by collect events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "item.event_buy_per_collect_30d",
+      "definition_version": 1,
+      "entity": "item",
+      "group": "behavior",
+      "name": "event_buy_per_collect_30d",
+      "description": "Buy events divided by collect events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": "item_id"
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "user.preferred_categories",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "preferred_categories",
+      "description": "Weighted top categories from expose, click, stay, collect and buy events.",
+      "value_type": "string",
+      "shape": "multi_value",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "top_k": 8,
+        "weights": {
+          "expose": 0.1,
+          "click": 1,
+          "stay": 1,
+          "collect": 3,
+          "buy": 5
+        },
+        "stay_value_transform": "log1p(max(value,0))",
+        "tie_break": "lexicographic"
+      },
+      "policy": "event_behavior_v1",
+      "default": "",
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "attribute",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.preferred_subcategories",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "preferred_subcategories",
+      "description": "Weighted top subcategories from expose, click, stay, collect and buy events.",
+      "value_type": "string",
+      "shape": "multi_value",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "top_k": 8,
+        "weights": {
+          "expose": 0.1,
+          "click": 1,
+          "stay": 1,
+          "collect": 3,
+          "buy": 5
+        },
+        "stay_value_transform": "log1p(max(value,0))",
+        "tie_break": "lexicographic"
+      },
+      "policy": "event_behavior_v1",
+      "default": "",
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "attribute",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_price_mean",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_price_mean",
+      "description": "Mean valid Item price over visible user events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_price_std",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_price_std",
+      "description": "Population standard deviation of valid Item prices over visible user events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_expose_price_mean",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_expose_price_mean",
+      "description": "Mean valid Item price for expose events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_expose_price_std",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_expose_price_std",
+      "description": "Population standard deviation of valid Item prices for expose events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_click_price_mean",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_click_price_mean",
+      "description": "Mean valid Item price for click events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_click_price_std",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_click_price_std",
+      "description": "Population standard deviation of valid Item prices for click events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_collect_price_mean",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_collect_price_mean",
+      "description": "Mean valid Item price for collect events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_collect_price_std",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_collect_price_std",
+      "description": "Population standard deviation of valid Item prices for collect events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_buy_price_mean",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_price_mean",
+      "description": "Mean valid Item price for buy events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_buy_price_std",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_price_std",
+      "description": "Population standard deviation of valid Item prices for buy events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_click_price_mean_1d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_click_price_mean_1d",
+      "description": "Mean valid Item price for click events in the inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_buy_price_mean_1d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_price_mean_1d",
+      "description": "Mean valid Item price for buy events in the inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_click_price_mean_7d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_click_price_mean_7d",
+      "description": "Mean valid Item price for click events in the inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_buy_price_mean_7d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_price_mean_7d",
+      "description": "Mean valid Item price for buy events in the inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_click_price_mean_30d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_click_price_mean_30d",
+      "description": "Mean valid Item price for click events in the inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_buy_price_mean_30d",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_price_mean_30d",
+      "description": "Mean valid Item price for buy events in the inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived",
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_buy_to_click_price_ratio",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_buy_to_click_price_ratio",
+      "description": "Mean buy Item price divided by mean click Item price.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "user.event_recent_to_long_click_price_ratio",
+      "definition_version": 1,
+      "entity": "user",
+      "group": "behavior",
+      "name": "event_recent_to_long_click_price_ratio",
+      "description": "One-day mean click Item price divided by thirty-day mean click Item price.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event_item_context",
+        "event_join": "item_id",
+        "item_as_of": "event.time",
+        "group_by": "user_id"
+      },
+      "aggregation": {
+        "operator": "derived"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "ecommerce"
       ]
     }
   ],

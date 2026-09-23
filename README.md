@@ -317,6 +317,11 @@ so `FeatureSpace` is saved beside every checkpoint and must be loaded by `rank-e
 
 `algorithm/feature/definitions/feature.catalog.json` is a generated, package-local copy of the
 global catalog owned by `model/feature/catalog/feature.catalog.json`; do not edit it directly. It
+also registers ecommerce user features derived from the Item context frozen into each event, with
+point-in-time Item-history lookup for legacy events. These include
+version visible at `event.time`: weighted category/subcategory preferences, per-action price
+mean/deviation, 1/7/30-day click and buy price means, and recent/long-term price ratios. Pandas and
+Spark point-in-time materializers and realtime snapshots implement the same formulas.
 contains every entity and behavioural feature OpenRec currently produces. `lr.feature-set.json` and
 `fm.feature-set.json` declare each model family's implemented feature capabilities and default
 selection. A training request can select an ordered subset of those supported features. These

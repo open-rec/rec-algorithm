@@ -6,6 +6,7 @@ import pandas as pd
 
 from algorithm.feature.event_feature import enrich_entity_features
 from algorithm.feature.content_feature import enrich_item_content_features
+from algorithm.feature.commerce_feature import enrich_user_commerce_features
 
 
 def resolve_event_mutations_as_of(events, observation_cutoff):
@@ -84,10 +85,11 @@ def _events_by_entity(events, key):
     frame = frame[frame[key].notna() & frame["time"].notna()]
     event_id = frame.get("event_id", pd.Series("", index=frame.index)).fillna("").astype(str)
     trace_id = frame.get("trace_id", pd.Series("", index=frame.index)).fillna("").astype(str)
-    fallback = (frame.get("user_id", "").astype(str) + "|" +
-                frame.get("item_id", "").astype(str) + "|" +
-                frame.get("scene", "").astype(str) + "|" +
-                frame.get("type", "").astype(str) + "|" + frame["time"].astype(str))
+    empty = pd.Series("", index=frame.index)
+    fallback = (frame.get("user_id", empty).astype(str) + "|" +
+                frame.get("item_id", empty).astype(str) + "|" +
+                frame.get("scene", empty).astype(str) + "|" +
+                frame.get("type", empty).astype(str) + "|" + frame["time"].astype(str))
     traced = fallback + "|" + trace_id
     frame["_event_key"] = event_id.where(event_id.str.len() > 0,
                                           traced.where(trace_id.str.len() > 0, fallback))
@@ -138,6 +140,9 @@ def materialize_point_in_time_samples(events, feature_events, users, items,
             continue
         user_frame = enrich_entity_features(pd.DataFrame([user]), _behavior_as_of(
             user_events, event["user_id"], label_time), "user", label_time)
+        user_frame = enrich_user_commerce_features(
+            user_frame, _behavior_as_of(user_events, event["user_id"], label_time),
+            items, label_time)
         item_entity = "user" if target_type == "user" else "item"
         item_frame = enrich_entity_features(pd.DataFrame([item]), _behavior_as_of(
             item_events, event["item_id"], label_time), item_entity, label_time)

@@ -69,7 +69,7 @@ def test_model_feature_sets_fit_and_persist_model_metadata(
 
     assert payload["feature_set"] == expected_name
     assert payload["model_type"] == model_type
-    assert payload["catalog_version"] == 14
+    assert payload["catalog_version"] == 17
     assert len(payload["catalog_sha256"]) == 64
     assert payload["input_dim"] == loaded.dim
     assert loaded.user_columns[0].feature_id == "user.country"

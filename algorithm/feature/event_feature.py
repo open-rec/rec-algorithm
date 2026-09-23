@@ -16,20 +16,28 @@ DAY_SECONDS = 24 * 60 * 60
 def _behavior_contract():
     catalog = FeatureCatalog.load()
     definitions = [value for value in catalog.features.values()
-                   if value.get("entity") == "user" and value.get("group") == "behavior"]
+                   if value.get("entity") == "user" and value.get("group") == "behavior"
+                   and value.get("materialization", {}).get("online")
+                   and value.get("source", {}).get("logical_entity") == "event"]
     window_features = tuple(
         (value["name"], value["aggregation"])
         for value in definitions
         if value.get("aggregation", {}).get("window_seconds")
+        and value.get("aggregation", {}).get("operator") != "ratio"
+    )
+    rate_features = tuple(
+        (value["name"], value["aggregation"])
+        for value in definitions
+        if value.get("aggregation", {}).get("operator") == "ratio"
     )
     event_types = dict.fromkeys(
         value["aggregation"]["filter"]["type"] for value in definitions
         if value.get("aggregation", {}).get("filter")
     )
-    return tuple(event_types), window_features
+    return tuple(event_types), window_features, rate_features
 
 
-DEFAULT_EVENT_TYPES, WINDOW_FEATURES = _behavior_contract()
+DEFAULT_EVENT_TYPES, WINDOW_FEATURES, RATE_FEATURES = _behavior_contract()
 
 
 def event_feature_columns(counterpart_name, event_types=DEFAULT_EVENT_TYPES):
@@ -41,6 +49,7 @@ def event_feature_columns(counterpart_name, event_types=DEFAULT_EVENT_TYPES):
     columns.extend(name for name, _ in WINDOW_FEATURES)
     columns.extend(f"event_{event_type}_count" for event_type in event_types)
     columns.append("event_click_rate")
+    columns.extend(name for name, _ in RATE_FEATURES)
     return columns
 
 
@@ -121,9 +130,23 @@ def aggregate_event_features(events, entity="user", as_of_time=None,
         result[f"event_{name}_count"] = counts.reindex(result.index, fill_value=0)
     click_count = result.get("event_click_count", pd.Series(0, index=result.index))
     expose_count = result.get("event_expose_count", pd.Series(0, index=result.index))
-    denominator = click_count + expose_count
+    labelled_count = click_count + expose_count
     result["event_click_rate"] = np.where(
-        denominator > 0, click_count / denominator, 0.0)
+        labelled_count > 0, click_count / labelled_count, 0.0)
+    for name, aggregation in RATE_FEATURES:
+        recent = frame
+        seconds = aggregation.get("window_seconds")
+        if seconds is not None:
+            recent = recent[recent["time"] >= snapshot - seconds]
+        recent_type = recent.get("type", pd.Series("", index=recent.index)) \
+            .fillna("").astype(str)
+        numerator = recent[recent_type == aggregation["numerator_type"]] \
+            .groupby(key).size().reindex(result.index, fill_value=0)
+        denominator = recent[recent_type == aggregation["denominator_type"]] \
+            .groupby(key).size().reindex(result.index, fill_value=0)
+        result[name] = np.divide(numerator, denominator,
+                                 out=np.zeros(len(result), dtype=float),
+                                 where=denominator.to_numpy() > 0)
     return result.reset_index()[columns]
 
 
