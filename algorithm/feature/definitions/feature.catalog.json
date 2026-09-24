@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_version": 17,
+  "catalog_version": 18,
   "description": "Canonical, implementation-independent features available to OpenRec rank models.",
   "policies": {
     "entity_profile_v1": {
@@ -1519,7 +1519,7 @@
     },
     {
       "id": "context.candidate_position",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "candidate_position",
@@ -1533,11 +1533,11 @@
       "policy": "request_context_v1",
       "default": 0,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1549,7 +1549,7 @@
     },
     {
       "id": "context.candidate_count",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "candidate_count",
@@ -1563,11 +1563,11 @@
       "policy": "request_context_v1",
       "default": 0,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1579,7 +1579,7 @@
     },
     {
       "id": "context.position_ratio",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "position_ratio",
@@ -1593,11 +1593,11 @@
       "policy": "request_context_v1",
       "default": 0,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1609,7 +1609,7 @@
     },
     {
       "id": "context.request_hour_sin",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "request_hour_sin",
@@ -1623,11 +1623,11 @@
       "policy": "request_context_v1",
       "default": 0,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1639,7 +1639,7 @@
     },
     {
       "id": "context.request_hour_cos",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "request_hour_cos",
@@ -1653,11 +1653,11 @@
       "policy": "request_context_v1",
       "default": 0,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1669,7 +1669,7 @@
     },
     {
       "id": "context.request_weekday_sin",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "request_weekday_sin",
@@ -1683,11 +1683,11 @@
       "policy": "request_context_v1",
       "default": 0,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1699,7 +1699,7 @@
     },
     {
       "id": "context.request_weekday_cos",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "request_weekday_cos",
@@ -1713,11 +1713,11 @@
       "policy": "request_context_v1",
       "default": 0,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1729,7 +1729,7 @@
     },
     {
       "id": "context.device_type",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "device_type",
@@ -1743,11 +1743,11 @@
       "policy": "request_context_v1",
       "default": "",
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1759,7 +1759,7 @@
     },
     {
       "id": "context.is_subscriber",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "is_subscriber",
@@ -1773,11 +1773,11 @@
       "policy": "request_context_v1",
       "default": false,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1789,7 +1789,7 @@
     },
     {
       "id": "context.is_authenticated",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "context",
       "group": "request",
       "name": "is_authenticated",
@@ -1803,11 +1803,11 @@
       "policy": "request_context_v1",
       "default": false,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "contextual",
       "scenes": [
         "all",
@@ -1918,7 +1918,7 @@
     },
     {
       "id": "interaction.user_item_click_count_log",
-      "definition_version": 1,
+      "definition_version": 2,
       "entity": "interaction",
       "group": "affinity",
       "name": "user_item_click_count_log",
@@ -1935,11 +1935,11 @@
       "policy": "event_behavior_v1",
       "default": 0,
       "materialization": {
-        "online": false,
+        "online": true,
         "offline": true,
         "backfillable": true
       },
-      "status": "experimental",
+      "status": "stable",
       "family": "interaction",
       "scenes": [
         "all",
@@ -6987,6 +6987,1600 @@
       "family": "temporal",
       "scenes": [
         "ecommerce"
+      ]
+    },
+    {
+      "id": "session.event_count",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_count",
+      "description": "Number of valid events observed for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_value_sum",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_value_sum",
+      "description": "Sum of numeric event values observed for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "sum"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_value_mean",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_value_mean",
+      "description": "Arithmetic mean of numeric event values observed for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "mean",
+        "denominator": "event_count"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_active_days",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_active_days",
+      "description": "Distinct UTC calendar days on which the session produced a valid event.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "time",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "distinct_count",
+        "expression": "floor(time / 86400)",
+        "exact": true
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_unique_scene_count",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_unique_scene_count",
+      "description": "Number of distinct non-empty scenes in valid session events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "scene",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "distinct_count",
+        "exact": true
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_unique_item_count",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_unique_item_count",
+      "description": "Number of distinct items in valid session events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "item_id",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "distinct_count",
+        "exact": true
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_first_time",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_first_time",
+      "description": "Earliest valid event time observed for the session, in epoch seconds.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "time",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "min"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_last_time",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_last_time",
+      "description": "Latest valid event time visible for the session, in epoch seconds.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "time",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "max"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_recency_seconds",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_recency_seconds",
+      "description": "Non-negative seconds from snapshot time to the session's latest valid event.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "derived",
+        "expression": "max(0, as_of_time - event_last_time)"
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_count_1d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_count_1d",
+      "description": "Valid session events in the inclusive one-day event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_count_7d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_count_7d",
+      "description": "Valid session events in the inclusive seven-day event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_count_30d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_count_30d",
+      "description": "Valid session events in the inclusive thirty-day event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_click_count",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_click_count",
+      "description": "Number of valid click events observed for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "click"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_expose_count",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_expose_count",
+      "description": "Number of valid expose events observed for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_buy_count",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_buy_count",
+      "description": "Number of valid buy events observed for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "buy"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_collect_count",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_collect_count",
+      "description": "Number of valid collect events observed for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "collect"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_stay_count",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_stay_count",
+      "description": "Number of valid stay events observed for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "filter": {
+          "type": "stay"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_click_rate",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_click_rate",
+      "description": "Session click count divided by click plus expose count, or zero when the denominator is zero.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "derived",
+        "expression": "event_click_count / (event_click_count + event_expose_count)",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_expose_count_5m",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_expose_count_5m",
+      "description": "Inclusive 5m exposure events for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "type",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 300,
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_value_sum_5m",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_value_sum_5m",
+      "description": "Inclusive 5m numeric event value for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "sum",
+        "window_seconds": 300
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_expose_count_1h",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_expose_count_1h",
+      "description": "Inclusive 1h exposure events for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "type",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 3600,
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_value_sum_1h",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_value_sum_1h",
+      "description": "Inclusive 1h numeric event value for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "sum",
+        "window_seconds": 3600
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_expose_count_24h",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_expose_count_24h",
+      "description": "Inclusive 24h exposure events for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "type",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "count",
+        "window_seconds": 86400,
+        "filter": {
+          "type": "expose"
+        }
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_value_sum_24h",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_value_sum_24h",
+      "description": "Inclusive 24h numeric event value for the session.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "field": "value",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "sum",
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_ctr",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_ctr",
+      "description": "Click events divided by expose events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_ctr_1d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_ctr_1d",
+      "description": "Click events divided by expose events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_ctr_7d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_ctr_7d",
+      "description": "Click events divided by expose events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_ctr_30d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_ctr_30d",
+      "description": "Click events divided by expose events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "click",
+        "denominator_type": "expose",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_collect_per_click",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_collect_per_click",
+      "description": "Collect events divided by click events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_collect_per_click_1d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_collect_per_click_1d",
+      "description": "Collect events divided by click events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_collect_per_click_7d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_collect_per_click_7d",
+      "description": "Collect events divided by click events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_collect_per_click_30d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_collect_per_click_30d",
+      "description": "Collect events divided by click events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "collect",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_buy_per_click",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_buy_per_click",
+      "description": "Buy events divided by click events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_buy_per_click_1d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_buy_per_click_1d",
+      "description": "Buy events divided by click events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_buy_per_click_7d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_buy_per_click_7d",
+      "description": "Buy events divided by click events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_buy_per_click_30d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_buy_per_click_30d",
+      "description": "Buy events divided by click events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "click",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_buy_per_collect",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_buy_per_collect",
+      "description": "Buy events divided by collect events.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "statistical",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_buy_per_collect_1d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_buy_per_collect_1d",
+      "description": "Buy events divided by collect events. Inclusive 1d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0,
+        "window_seconds": 86400
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_buy_per_collect_7d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_buy_per_collect_7d",
+      "description": "Buy events divided by collect events. Inclusive 7d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0,
+        "window_seconds": 604800
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
+      ]
+    },
+    {
+      "id": "session.event_buy_per_collect_30d",
+      "definition_version": 1,
+      "entity": "session",
+      "group": "behavior",
+      "name": "event_buy_per_collect_30d",
+      "description": "Buy events divided by collect events. Inclusive 30d event-time window.",
+      "value_type": "float64",
+      "shape": "scalar",
+      "source": {
+        "logical_entity": "event",
+        "group_by": [
+          "u",
+          "s",
+          "e",
+          "r",
+          "_",
+          "i",
+          "d"
+        ]
+      },
+      "aggregation": {
+        "operator": "ratio",
+        "numerator_type": "buy",
+        "denominator_type": "collect",
+        "zero_denominator": 0,
+        "window_seconds": 2592000
+      },
+      "policy": "event_behavior_v1",
+      "default": 0,
+      "materialization": {
+        "online": true,
+        "offline": true,
+        "backfillable": true
+      },
+      "status": "stable",
+      "family": "temporal",
+      "scenes": [
+        "all"
       ]
     }
   ],

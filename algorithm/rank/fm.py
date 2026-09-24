@@ -42,6 +42,7 @@ class FMRecModel(LRRecModel):
     def __init__(self, user_feature=None, item_feature=None, events=None, feature_space=None,
                  scene=DEFAULT_SCENE, model_file=None, feature_file=None, factor_dim=8,
                  target_type="item", sample_users=None, sample_items=None,
+                 sample_sessions=None, sample_contexts=None, sample_interactions=None,
                  validation_ratio=.2):
         model_file = model_file or rank_model_path(scene) / MODEL_FILENAME
         feature_file = feature_file or feature_path(scene) / FEATURE_FILENAME
@@ -49,6 +50,8 @@ class FMRecModel(LRRecModel):
                          feature_space=feature_space, scene=scene, model_file=model_file,
                          feature_file=feature_file, model_type="fm", target_type=target_type,
                          sample_users=sample_users, sample_items=sample_items,
+                         sample_sessions=sample_sessions, sample_contexts=sample_contexts,
+                         sample_interactions=sample_interactions,
                          validation_ratio=validation_ratio)
         self.model = FMModel(dim=self.dataset.feature_dim, factor_dim=factor_dim)
 

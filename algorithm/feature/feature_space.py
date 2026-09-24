@@ -53,7 +53,15 @@ DEFAULT_MULTI_SEP = r"[,/]"
 
 _TRUTHY = {"1", "true", "t", "yes", "y"}
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+
+def _frame(value, rows=0):
+    if value is None:
+        return pd.DataFrame(index=range(rows))
+    if isinstance(value, pd.DataFrame):
+        return value
+    return pd.DataFrame(value)
 
 
 def _str_series(frame, name):
@@ -288,6 +296,9 @@ class FeatureSpace(object):
         self,
         user_columns=None,
         item_columns=None,
+        session_columns=None,
+        context_columns=None,
+        interaction_columns=None,
         catalog_version=None,
         catalog_sha256=None,
         feature_set=None,
@@ -305,6 +316,9 @@ class FeatureSpace(object):
             if item_columns is not None
             else _default_item_columns()
         )
+        self.session_columns = session_columns or []
+        self.context_columns = context_columns or []
+        self.interaction_columns = interaction_columns or []
         self.catalog_version = catalog_version
         self.catalog_sha256 = catalog_sha256
         self.feature_set = feature_set
@@ -339,13 +353,19 @@ class FeatureSpace(object):
             raise ValueError("target_type must be item or user")
         source = [(key, catalog.require(key)) for key in chosen["user"]]
         target = [(key, catalog.require(key)) for key in chosen["candidate"]]
+        sessions = [(key, catalog.require(key)) for key in chosen["session"]]
+        contexts = [(key, catalog.require(key)) for key in chosen["context"]]
+        interactions = [(key, catalog.require(key)) for key in chosen["interaction"]]
         fingerprint = {
             key: catalog.fingerprint(key)
-            for key in set(chosen["user"] + chosen["candidate"])
+            for key in set(sum(chosen.values(), []))
         }
         return cls(
             user_columns=columns(source),
             item_columns=columns(target),
+            session_columns=columns(sessions),
+            context_columns=columns(contexts),
+            interaction_columns=columns(interactions),
             catalog_version=selected.catalog_version,
             catalog_sha256=selected.catalog_sha256,
             feature_set=selected.name,
@@ -356,10 +376,15 @@ class FeatureSpace(object):
 
     @property
     def selection(self):
-        return {
+        roles = {
             "user": [column.feature_id for column in self.user_columns],
             "candidate": [column.feature_id for column in self.item_columns],
+            "session": [column.feature_id for column in self.session_columns],
+            "context": [column.feature_id for column in self.context_columns],
+            "interaction": [column.feature_id for column in self.interaction_columns],
         }
+        return {role: values for role, values in roles.items()
+                if values or role in ("user", "candidate")}
 
     @property
     def user_width(self):
@@ -370,17 +395,37 @@ class FeatureSpace(object):
         return sum(column.width for column in self.item_columns)
 
     @property
+    def session_width(self):
+        return sum(column.width for column in self.session_columns)
+
+    @property
+    def context_width(self):
+        return sum(column.width for column in self.context_columns)
+
+    @property
+    def interaction_width(self):
+        return sum(column.width for column in self.interaction_columns)
+
+    @property
     def dim(self):
         """
         The model's in_features — user vector and item vector concatenated.
         """
-        return self.user_width + self.item_width
+        return (self.user_width + self.item_width + self.session_width
+                + self.context_width + self.interaction_width)
 
-    def fit(self, users=None, items=None):
+    def fit(self, users=None, items=None, sessions=None, contexts=None,
+            interactions=None):
         for column in self.user_columns:
             column.fit(users)
         for column in self.item_columns:
             column.fit(items)
+        for column in self.session_columns:
+            column.fit(_frame(sessions))
+        for column in self.context_columns:
+            column.fit(_frame(contexts))
+        for column in self.interaction_columns:
+            column.fit(_frame(interactions))
         self.fitted = True
         return self
 
@@ -401,6 +446,39 @@ class FeatureSpace(object):
         return np.hstack(
             [column.transform(items) for column in self.item_columns]
         )
+
+    @staticmethod
+    def _transform(columns, frame):
+        frame = _frame(frame)
+        if not columns:
+            return np.zeros((len(frame), 0), dtype=np.float64)
+        return np.hstack([column.transform(frame) for column in columns])
+
+    def transform_sessions(self, sessions):
+        self._require_fitted()
+        return self._transform(self.session_columns, sessions)
+
+    def transform_contexts(self, contexts):
+        self._require_fitted()
+        return self._transform(self.context_columns, contexts)
+
+    def transform_interactions(self, interactions):
+        self._require_fitted()
+        return self._transform(self.interaction_columns, interactions)
+
+    def transform_candidates(self, users, items, sessions=None, contexts=None,
+                             interactions=None):
+        """Encode aligned ranking rows in canonical role order."""
+        frames = [self.transform_users(users), self.transform_items(items)]
+        rows = len(users)
+        for value, transform in ((sessions, self.transform_sessions),
+                                 (contexts, self.transform_contexts),
+                                 (interactions, self.transform_interactions)):
+            value = _frame(value, rows)
+            if len(value) != rows:
+                raise ValueError("all ranking feature frames must be row-aligned")
+            frames.append(transform(value))
+        return np.hstack(frames)
 
     def build_maps(self, users=None, items=None):
         """
@@ -427,8 +505,14 @@ class FeatureSpace(object):
             "version": SCHEMA_VERSION,
             "user": [column.to_dict() for column in self.user_columns],
             "item": [column.to_dict() for column in self.item_columns],
+            "session": [column.to_dict() for column in self.session_columns],
+            "context": [column.to_dict() for column in self.context_columns],
+            "interaction": [column.to_dict() for column in self.interaction_columns],
             "user_width": self.user_width,
             "item_width": self.item_width,
+            "session_width": self.session_width,
+            "context_width": self.context_width,
+            "interaction_width": self.interaction_width,
             "input_dim": self.dim,
             "target_type": self.target_type,
         }
@@ -448,7 +532,7 @@ class FeatureSpace(object):
     @classmethod
     def from_dict(cls, payload):
         version = payload.get("version")
-        if version != SCHEMA_VERSION:
+        if version not in (1, SCHEMA_VERSION):
             raise ValueError(
                 f"unsupported feature space version {version}, "
                 f"expected {SCHEMA_VERSION}"
@@ -459,8 +543,8 @@ class FeatureSpace(object):
             installed = FeatureCatalog.load()
             referenced = {
                 column.get("feature")
-                for role in ("user", "item")
-                for column in payload[role]
+                for role in ("user", "item", "session", "context", "interaction")
+                for column in payload.get(role, [])
             }
             if not definitions or referenced != set(definitions):
                 raise ValueError(
@@ -487,6 +571,12 @@ class FeatureSpace(object):
             item_columns=[
                 ColumnSpec.from_dict(item) for item in payload["item"]
             ],
+            session_columns=[ColumnSpec.from_dict(item)
+                             for item in payload.get("session", [])],
+            context_columns=[ColumnSpec.from_dict(item)
+                             for item in payload.get("context", [])],
+            interaction_columns=[ColumnSpec.from_dict(item)
+                                 for item in payload.get("interaction", [])],
             catalog_version=payload.get("catalog_version"),
             catalog_sha256=catalog_sha256,
             feature_set=payload.get("feature_set"),
@@ -494,10 +584,12 @@ class FeatureSpace(object):
             target_type=payload.get("target_type", "item"),
             feature_definitions=definitions,
         )
-        if (
-            payload.get("feature_selection") is not None
-            and payload["feature_selection"] != space.selection
-        ):
+        expected_selection = payload.get("feature_selection")
+        actual_selection = space.selection
+        if version == 1 and expected_selection is not None:
+            actual_selection = {key: actual_selection[key]
+                                for key in ("user", "candidate")}
+        if expected_selection is not None and expected_selection != actual_selection:
             raise ValueError(
                 "feature selection does not match fitted encoders"
             )
@@ -505,6 +597,9 @@ class FeatureSpace(object):
         for key, actual in (
             ("user_width", space.user_width),
             ("item_width", space.item_width),
+            ("session_width", space.session_width),
+            ("context_width", space.context_width),
+            ("interaction_width", space.interaction_width),
             ("input_dim", space.dim),
         ):
             expected = payload.get(key)

@@ -45,6 +45,9 @@ class EventDataSet(Dataset):
         feature_space: FeatureSpace = None,
         sample_users: DataFrame = None,
         sample_items: DataFrame = None,
+        sample_sessions: DataFrame = None,
+        sample_contexts: DataFrame = None,
+        sample_interactions: DataFrame = None,
         validation_ratio: float = 0.2,
         target_type: str = "item",
     ):
@@ -59,6 +62,9 @@ class EventDataSet(Dataset):
         self.dim = 1
         self.sample_users = sample_users
         self.sample_items = sample_items
+        self.sample_sessions = sample_sessions
+        self.sample_contexts = sample_contexts
+        self.sample_interactions = sample_interactions
         self.validation_ratio = validation_ratio
         self.target_type = target_type
         self.preprocess(feature_space)
@@ -141,7 +147,13 @@ class EventDataSet(Dataset):
                 fit_items = candidate_frame[
                     candidate_frame["id"].isin(train_events["item_id"])
                 ]
-            space.fit(users=fit_users, items=fit_items)
+            positions = self.events.iloc[train_indices]["_sample_position"].to_numpy()
+            dynamic = []
+            for frame in (self.sample_sessions, self.sample_contexts,
+                          self.sample_interactions):
+                dynamic.append(frame.iloc[positions] if frame is not None else None)
+            space.fit(users=fit_users, items=fit_items, sessions=dynamic[0],
+                      contexts=dynamic[1], interactions=dynamic[2])
         self._bind(space)
 
         # plain numpy for __getitem__: a DataFrame.iloc lookup per sample
@@ -151,6 +163,7 @@ class EventDataSet(Dataset):
         self._label_values = self.labels.to_numpy()
         self._sample_user_values = None
         self._sample_item_values = None
+        self._sample_dynamic_values = None
         if self.sample_users is not None or self.sample_items is not None:
             if self.sample_users is None or self.sample_items is None:
                 raise ValueError(
@@ -179,6 +192,18 @@ class EventDataSet(Dataset):
             self._sample_item_values = space.transform_items(
                 aligned_items
             ).astype(np.float32)
+            rows = len(aligned_items)
+            dynamic_frames = []
+            for frame in (self.sample_sessions, self.sample_contexts,
+                          self.sample_interactions):
+                dynamic_frames.append(
+                    frame.iloc[positions].reset_index(drop=True)
+                    if frame is not None else DataFrame(index=range(rows)))
+            self._sample_dynamic_values = np.hstack((
+                space.transform_sessions(dynamic_frames[0]),
+                space.transform_contexts(dynamic_frames[1]),
+                space.transform_interactions(dynamic_frames[2]),
+            )).astype(np.float32)
 
     def split_indices(self, val_ratio=None):
         """
@@ -224,7 +249,9 @@ class EventDataSet(Dataset):
             k: v.astype(np.float32) for k, v in user_map.items()
         }
         self.item_feature_map = {
-            k: v.astype(np.float32) for k, v in item_map.items()
+            k: np.concatenate((v, np.zeros(
+                space.session_width + space.context_width + space.interaction_width
+            ))).astype(np.float32) for k, v in item_map.items()
         }
         self.dim = space.dim
 
@@ -249,6 +276,9 @@ class EventDataSet(Dataset):
             if self._sample_item_values is not None
             else self.item_feature_map[self._item_ids[idx]]
         )
+        if self._sample_dynamic_values is not None:
+            item_feature = torch.from_numpy(np.concatenate((
+                item_feature.numpy(), self._sample_dynamic_values[idx])))
         label = torch.tensor(self._label_values[idx], dtype=torch.float32)
         return user_feature, item_feature, label
 
@@ -310,6 +340,9 @@ class LRRecModel(RecModel):
         target_type="item",
         sample_users=None,
         sample_items=None,
+        sample_sessions=None,
+        sample_contexts=None,
+        sample_interactions=None,
         validation_ratio=0.2,
     ):
         """
@@ -353,6 +386,9 @@ class LRRecModel(RecModel):
             feature_space=feature_space,
             sample_users=sample_users,
             sample_items=sample_items,
+            sample_sessions=sample_sessions,
+            sample_contexts=sample_contexts,
+            sample_interactions=sample_interactions,
             validation_ratio=validation_ratio,
             target_type=target_type,
         )

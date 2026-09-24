@@ -69,7 +69,7 @@ def test_model_feature_sets_fit_and_persist_model_metadata(
 
     assert payload["feature_set"] == expected_name
     assert payload["model_type"] == model_type
-    assert payload["catalog_version"] == 17
+    assert payload["catalog_version"] == 18
     assert len(payload["catalog_sha256"]) == 64
     assert payload["input_dim"] == loaded.dim
     assert loaded.user_columns[0].feature_id == "user.country"
@@ -270,12 +270,24 @@ def test_catalog_exposes_user_facing_taxonomy_and_scene_metadata():
     ]
     assert len(context) == 54
     assert all(feature["family"] == "contextual" for feature in context)
-    assert all(feature["status"] == "experimental" for feature in context)
-    assert all(not feature["materialization"]["online"] for feature in context)
+    stable_context = {feature["id"] for feature in context
+                      if feature["status"] == "stable"}
+    assert stable_context == {
+        "context.candidate_position", "context.candidate_count",
+        "context.position_ratio", "context.request_hour_sin",
+        "context.request_hour_cos", "context.request_weekday_sin",
+        "context.request_weekday_cos", "context.device_type",
+        "context.is_subscriber", "context.is_authenticated",
+    }
+    assert {feature["id"] for feature in context
+            if feature["materialization"]["online"]} == stable_context
     interaction = [
         feature for feature in payload["features"]
         if feature["id"].startswith("interaction.")
     ]
     assert len(interaction) == 23
     assert all(feature["family"] == "interaction" for feature in interaction)
-    assert all(feature["status"] == "experimental" for feature in interaction)
+    assert {feature["id"] for feature in interaction
+            if feature["status"] == "stable"} == {
+        "interaction.user_item_click_count_log"
+    }

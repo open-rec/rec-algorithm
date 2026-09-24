@@ -97,6 +97,11 @@ class ModelFeatureSet(object):
         self.catalog_sha256 = catalog.sha256
         self.user = self._resolve(payload.get("user", []), "user", catalog)
         self.item = self._resolve(payload.get("item", []), "item", catalog)
+        self.session = self._resolve(payload.get("session", []), "session", catalog)
+        self.context = self._resolve(payload.get("context", []), "context", catalog)
+        self.interaction = self._resolve(
+            payload.get("interaction", []), "interaction", catalog
+        )
 
     @staticmethod
     def _resolve(feature_ids, entity, catalog):
@@ -138,15 +143,20 @@ def select_features(
         "candidate": supported.item
         if target_type == "item"
         else supported.user,
+        "session": supported.session,
+        "context": supported.context,
+        "interaction": supported.interaction,
     }
-    if selection is not None and (
-        not isinstance(selection, dict) or set(selection) != set(roles)
-    ):
+    if selection is not None and not isinstance(selection, dict):
+        raise ValueError("feature_selection must be an object")
+    if selection is not None and not {"user", "candidate"}.issubset(selection):
         raise ValueError("feature_selection must contain user and candidate")
+    if selection is not None and set(selection) - set(roles):
+        raise ValueError("feature_selection contains an unknown role")
     result = {}
     for role, definitions in roles.items():
         allowed = dict(definitions)
-        ids = list(allowed) if selection is None else selection[role]
+        ids = list(allowed) if selection is None else selection.get(role, [])
         if families is not None:
             unknown = set(families) - set(supported.payload.get("families", []))
             if unknown:
@@ -161,12 +171,11 @@ def select_features(
                 if "all" in allowed[value].get("scenes", ["all"])
                 or scene in allowed[value].get("scenes", [])
             ]
-        if (
+        if ((role in ("user", "candidate") and not ids) or (ids and (
             not isinstance(ids, list)
-            or not ids
             or any(not isinstance(value, str) for value in ids)
             or len(set(ids)) != len(ids)
-        ):
+        ))):
             raise ValueError(
                 "%s features must be a unique nonempty list" % role
             )

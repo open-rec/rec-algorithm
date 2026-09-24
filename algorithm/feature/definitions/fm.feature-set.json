@@ -1,7 +1,7 @@
 {
   "name": "ranking-fm-v1",
   "model_type": "fm",
-  "catalog_version": 17,
+  "catalog_version": 18,
   "user": [
     "user.country",
     "user.city",
@@ -125,5 +125,29 @@
     "temporal",
     "contextual",
     "interaction"
+  ],
+  "session": [
+    "session.event_count",
+    "session.event_unique_item_count",
+    "session.event_recency_seconds",
+    "session.event_click_count",
+    "session.event_expose_count",
+    "session.event_buy_count",
+    "session.event_collect_count"
+  ],
+  "context": [
+    "context.candidate_position",
+    "context.candidate_count",
+    "context.position_ratio",
+    "context.request_hour_sin",
+    "context.request_hour_cos",
+    "context.request_weekday_sin",
+    "context.request_weekday_cos",
+    "context.device_type",
+    "context.is_subscriber",
+    "context.is_authenticated"
+  ],
+  "interaction": [
+    "interaction.user_item_click_count_log"
   ]
 }

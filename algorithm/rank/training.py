@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from algorithm.feature.feature_catalog import select_features
 from algorithm.feature.feature_space import FeatureSpace
 from algorithm.feature.content_feature import enrich_item_content_features
+from algorithm.feature.context_feature import materialize_request_context
 from algorithm.feature.item_feature import ItemFeature
 from algorithm.feature.point_in_time import materialize_point_in_time_samples
 from algorithm.feature.user_feature import UserFeature
@@ -171,13 +172,34 @@ def train_release(info: TrainingRequest, artifact_root):
             sample_users, sample_items = _align_materialized_rows(
                 events, sample_users, sample_items
             )
+            dynamic = []
+            for name in ("sample_sessions", "sample_contexts", "sample_interactions"):
+                path = dataset / (name + ".jsonl")
+                if path.exists():
+                    frame = read_records(path)
+                    if set(frame.get("_sample_id", [])) != set(events["_sample_id"]):
+                        raise ValueError("%s rows do not match event samples" % name)
+                    frame = frame.set_index("_sample_id").loc[
+                        events["_sample_id"].tolist()].reset_index()
+                else:
+                    frame = pd.DataFrame(index=range(len(events)))
+                dynamic.append(frame)
+            sample_sessions, sample_contexts, sample_interactions = dynamic
+            if sample_contexts.empty or not len(sample_contexts.columns):
+                sample_contexts = pd.concat([
+                    materialize_request_context(row.to_dict(), [row["item_id"]],
+                                                row.get("time"))
+                    for _, row in events.iterrows()
+                ], ignore_index=True)
         else:
             feature_events = read_records(dataset / "feature_events.jsonl")
             items = read_records(dataset / "items.jsonl")
             users = read_records(dataset / "users.jsonl")
-            events, sample_users, sample_items = (
+            (events, sample_users, sample_items, sample_sessions,
+             sample_contexts, sample_interactions) = (
                 materialize_point_in_time_samples(
-                    events, feature_events, users, items, info.target_type
+                    events, feature_events, users, items, info.target_type,
+                    include_dynamic=True
                 )
             )
         if events.empty:
@@ -194,9 +216,30 @@ def train_release(info: TrainingRequest, artifact_root):
         space = FeatureSpace.for_model(
             info.model_type, info.target_type, selection
         )
+        # Older Spark materializations predate dynamic role files. Preserve
+        # their usability with explicit neutral rows; new jobs can publish the
+        # three optional sample_* files for point-in-time values.
+        def aligned_dynamic(frame):
+            return (frame.reset_index(drop=True) if len(frame) == len(events)
+                    else pd.DataFrame(index=range(len(events))))
+
+        sample_sessions = aligned_dynamic(sample_sessions)
+        sample_contexts = aligned_dynamic(sample_contexts)
+        sample_interactions = aligned_dynamic(sample_interactions)
+        for frame, columns in (
+            (sample_sessions, space.session_columns),
+            (sample_contexts, space.context_columns),
+            (sample_interactions, space.interaction_columns),
+        ):
+            for column in columns:
+                if column.name not in frame:
+                    frame[column.name] = 0
         for frame, columns in (
             (sample_users, space.user_columns),
             (sample_items, space.item_columns),
+            (sample_sessions, space.session_columns),
+            (sample_contexts, space.context_columns),
+            (sample_interactions, space.interaction_columns),
         ):
             for column in columns:
                 if (
@@ -229,6 +272,9 @@ def train_release(info: TrainingRequest, artifact_root):
             target_type=info.target_type,
             sample_users=sample_users,
             sample_items=sample_items,
+            sample_sessions=sample_sessions,
+            sample_contexts=sample_contexts,
+            sample_interactions=sample_interactions,
             validation_ratio=info.validation_ratio,
             **({"model_type": "lightgbm"} if model_type == "lightgbm" else {}),
             **model_kwargs,

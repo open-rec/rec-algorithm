@@ -7,6 +7,8 @@ import pandas as pd
 from algorithm.feature.event_feature import enrich_entity_features
 from algorithm.feature.content_feature import enrich_item_content_features
 from algorithm.feature.commerce_feature import enrich_user_commerce_features
+from algorithm.feature.context_feature import (candidate_interactions,
+    materialize_request_context, materialize_session_features)
 
 
 def resolve_event_mutations_as_of(events, observation_cutoff):
@@ -120,7 +122,7 @@ def _behavior_as_of(index, entity_id, label_time):
 
 
 def materialize_point_in_time_samples(events, feature_events, users, items,
-                                      target_type="item"):
+                                      target_type="item", include_dynamic=False):
     """Return labels and aligned user/candidate feature rows as they existed at label time."""
     if target_type not in ("item", "user"):
         raise ValueError("target_type must be item or user")
@@ -131,6 +133,7 @@ def materialize_point_in_time_samples(events, feature_events, users, items,
     item_events = user_events if target_type == "user" else _events_by_entity(
         feature_events, "item_id")
     labels, sample_users, sample_items = [], [], []
+    sample_sessions, sample_contexts, sample_interactions = [], [], []
     labels_frame = events[events["type"].isin(("click", "expose"))]
     for _, event in labels_frame.sort_values("time", kind="mergesort").iterrows():
         label_time = int(event["time"])
@@ -151,6 +154,19 @@ def materialize_point_in_time_samples(events, feature_events, users, items,
         labels.append(event.to_dict())
         sample_users.append(user_frame.iloc[0].to_dict())
         sample_items.append(item_frame.iloc[0].to_dict())
-    return (pd.DataFrame(labels).reset_index(drop=True),
+        if include_dynamic:
+            history = _behavior_as_of(user_events, event["user_id"], label_time)
+            session_id = event.get("session_id", "")
+            sample_sessions.append(materialize_session_features(
+                history, label_time, session_id))
+            sample_contexts.append(materialize_request_context(
+                event.to_dict(), [event["item_id"]], label_time).iloc[0].to_dict())
+            sample_interactions.append(candidate_interactions(
+                history, [event["item_id"]], label_time).iloc[0].to_dict())
+    base = (pd.DataFrame(labels).reset_index(drop=True),
             pd.DataFrame(sample_users).reset_index(drop=True),
             pd.DataFrame(sample_items).reset_index(drop=True))
+    if not include_dynamic:
+        return base
+    return base + (pd.DataFrame(sample_sessions), pd.DataFrame(sample_contexts),
+                   pd.DataFrame(sample_interactions))
