@@ -353,9 +353,12 @@ class FeatureSpace(object):
             raise ValueError("target_type must be item or user")
         source = [(key, catalog.require(key)) for key in chosen["user"]]
         target = [(key, catalog.require(key)) for key in chosen["candidate"]]
-        sessions = [(key, catalog.require(key)) for key in chosen["session"]]
-        contexts = [(key, catalog.require(key)) for key in chosen["context"]]
-        interactions = [(key, catalog.require(key)) for key in chosen["interaction"]]
+        sessions = [(key, catalog.require(key))
+                    for key in chosen.get("session", [])]
+        contexts = [(key, catalog.require(key))
+                    for key in chosen.get("context", [])]
+        interactions = [(key, catalog.require(key))
+                        for key in chosen.get("interaction", [])]
         fingerprint = {
             key: catalog.fingerprint(key)
             for key in set(sum(chosen.values(), []))

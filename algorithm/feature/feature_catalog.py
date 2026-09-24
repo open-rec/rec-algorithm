@@ -195,7 +195,11 @@ def select_features(
                     "feature is not implemented online and offline: %s"
                     % feature_id
                 )
-        result[role] = list(ids)
+        # Keep the established two-role gateway response byte-for-byte
+        # compatible when callers submit a legacy selection. Optional roles
+        # become first-class only when they actually select features.
+        if ids or role in ("user", "candidate"):
+            result[role] = list(ids)
     return result
 
 
