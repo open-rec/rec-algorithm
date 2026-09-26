@@ -4,6 +4,8 @@ import math
 import re
 from collections import Counter
 
+import numpy as np
+
 from algorithm.structure.score_item import ScoreItem
 
 
@@ -36,6 +38,7 @@ class BM25Recall(object):
         self._weights = dict(field_weights or {})
         self._ids = []
         self._terms = []
+        self._postings = {}
         document_frequency = Counter()
         for entity_id, document in documents.items():
             fields = document if isinstance(document, dict) else {"text": document}
@@ -49,32 +52,55 @@ class BM25Recall(object):
             self._ids.append(str(entity_id))
             self._terms.append(frequencies)
             document_frequency.update(frequencies.keys())
+            position = len(self._ids) - 1
+            for term, frequency in frequencies.items():
+                self._postings.setdefault(term, []).append((position, frequency))
         self._lengths = [sum(values.values()) for values in self._terms]
+        self._index = {entity_id: position for position, entity_id in enumerate(self._ids)}
         self._average_length = sum(self._lengths) / max(len(self._lengths), 1)
         count = len(self._ids)
         self._idf = {
             term: math.log(1.0 + (count - frequency + 0.5) / (frequency + 0.5))
             for term, frequency in document_frequency.items()
         }
+        self._postings = {
+            term: (np.asarray([position for position, _ in values], dtype=np.int64),
+                   np.asarray([frequency for _, frequency in values], dtype=np.float64))
+            for term, values in self._postings.items()
+        }
+        lengths = np.asarray(self._lengths, dtype=np.float64)
+        self._normalizations = self._k1 * (
+            1.0 - self._b + self._b * lengths / max(self._average_length, 1e-12))
 
     def recall(self, query, exclude=None, recall_size=None):
         terms = tokenize(query)
         if not terms:
             return []
         excluded = {str(value) for value in (exclude or ())}
-        scored = []
-        for entity_id, frequencies, length in zip(self._ids, self._terms, self._lengths):
-            if entity_id in excluded:
+        scores = np.zeros(len(self._ids), dtype=np.float64)
+        for term, query_frequency in Counter(terms).items():
+            idf = self._idf.get(term, 0.0)
+            postings = self._postings.get(term)
+            if postings is None:
                 continue
-            score = 0.0
-            normalization = self._k1 * (
-                1.0 - self._b + self._b * length / max(self._average_length, 1e-12))
-            for term in terms:
-                frequency = frequencies.get(term, 0.0)
-                if frequency:
-                    score += self._idf.get(term, 0.0) * (
-                        frequency * (self._k1 + 1.0) / (frequency + normalization))
-            if score > 0:
-                scored.append(ScoreItem(item=entity_id, score=score))
+            positions, frequencies = postings
+            scores[positions] += query_frequency * idf * (
+                frequencies * (self._k1 + 1.0)
+                / (frequencies + self._normalizations[positions]))
         size = self._recall_size if recall_size is None else int(recall_size)
-        return sorted(scored, key=lambda value: (-value.score, value.item))[:max(0, size)]
+        size = max(0, size)
+        if not size:
+            return []
+        for entity_id in excluded:
+            position = self._index.get(entity_id)
+            if position is not None:
+                scores[position] = 0.0
+        positions = np.flatnonzero(scores > 0)
+        if len(positions) > size:
+            candidate_scores = scores[positions]
+            threshold = np.partition(candidate_scores, len(candidate_scores) - size)[
+                len(candidate_scores) - size]
+            positions = positions[candidate_scores >= threshold]
+        ranked = sorted(positions, key=lambda position: (-scores[position], self._ids[position]))
+        return [ScoreItem(item=self._ids[position], score=float(scores[position]))
+                for position in ranked[:size]]
