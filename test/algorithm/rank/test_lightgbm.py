@@ -25,6 +25,18 @@ def test_ranker_round_trip(tmp_path):
     assert np.allclose(score, restored)
 
 
+def test_ranker_validation_uses_configured_cutoffs():
+    pytest.importorskip("lightgbm")
+    x = np.array([[1], [0], [0.8], [0.1]], dtype=np.float32)
+    y = np.array([1, 0, 1, 0])
+    groups = np.array(["a", "a", "b", "b"])
+    model = LightGBMRankModel(
+        n_estimators=10, min_child_samples=1,
+        early_stopping_rounds=2, eval_at=[1, 2]
+    ).fit(x, y, groups, validation=(x, y, groups))
+    assert model.booster is not None
+
+
 def test_binary_round_trip(tmp_path):
     pytest.importorskip("lightgbm")
     x = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float32)

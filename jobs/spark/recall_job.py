@@ -8,7 +8,7 @@ from pyspark.sql import functions as F
 
 from jobs.spark.io import keep_active_item_events, read_events, read_items, read_users, write_result
 from jobs.spark.recall import (content_i2i, content_u2u, hot, item_cf_i2i, item_seq_emb,
-                               new, user_cf_u2i, user_cf_u2u, user_emb_u2u)
+                               new, sparse_documents, user_cf_u2i, user_cf_u2u, user_emb_u2u)
 from publisher.spark import publish_embedding, publish_recall
 
 
@@ -17,6 +17,7 @@ SERVING_TABLES = {
     "content_i2i": "content-i2i", "user_cf_u2i": "user-cf-u2i",
     "user_cf_u2u": "user-cf-u2u", "content_u2u": "content-u2u",
     "user_emb_u2u": "user-als-emb",
+    "sparse": "sparse",
 }
 
 
@@ -24,7 +25,7 @@ def parser():
     result = argparse.ArgumentParser(description="OpenRec distributed recall job")
     result.add_argument("algorithm", choices=("hot", "new", "item_cf_i2i", "item_seq_emb",
                                                "user_cf_u2i", "content_i2i", "user_cf_u2u",
-                                               "content_u2u", "user_emb_u2u"))
+                                               "content_u2u", "user_emb_u2u", "sparse"))
     result.add_argument("--event-table", default="openrec.event_entity")
     result.add_argument("--item-table", default="openrec.item_entity")
     result.add_argument("--event-path")
@@ -41,6 +42,7 @@ def parser():
     result.add_argument("--vector-size", type=int, default=10)
     result.add_argument("--min-count", type=int, default=5)
     result.add_argument("--neighbour-size", type=int, default=50)
+    result.add_argument("--text-columns", default="title,category,tags")
     result.add_argument("--publish", action="store_true")
     result.add_argument("--redis-host", default="redis")
     result.add_argument("--redis-port", type=int, default=6379)
@@ -65,6 +67,9 @@ def run(args, spark=None):
                        path=args.item_path)
     if args.algorithm == "new":
         output = new(items, args.size)
+    elif args.algorithm == "sparse":
+        columns = tuple(value.strip() for value in args.text_columns.split(",") if value.strip())
+        output = sparse_documents(items, columns)
     elif args.algorithm == "content_i2i":
         output = content_i2i(items, args.size)
     else:

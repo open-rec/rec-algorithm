@@ -40,7 +40,11 @@ def publish_recall(frame, kind, business_date, revision="r001", hosts=None, user
 
         def actions():
             for row in rows:
-                source = {"scene": row.scene, "score": float(row.score)}
+                if kind == "sparse":
+                    source = {"scene": row.scene, "item": row.item, "text": row.text}
+                    doc_id = "%s:%s" % (row.scene, row.item)
+                else:
+                    source = {"scene": row.scene, "score": float(row.score)}
                 if kind in ("item-cf-i2i", "content-i2i"):
                     source.update(left_item=row.left_item, right_item=row.right_item)
                     doc_id = "%s:%s:%s" % (row.scene, row.left_item, row.right_item)
@@ -50,7 +54,7 @@ def publish_recall(frame, kind, business_date, revision="r001", hosts=None, user
                 elif kind in ("user-cf-u2u", "content-u2u", "user-als-emb"):
                     source.update(left_user=row.left_user, right_user=row.right_user)
                     doc_id = "%s:%s:%s" % (row.scene, row.left_user, row.right_user)
-                else:
+                elif kind != "sparse":
                     source["item"] = row.item
                     doc_id = "%s:%s" % (row.scene, row.item)
                     if kind == "new":

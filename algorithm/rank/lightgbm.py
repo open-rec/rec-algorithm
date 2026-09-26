@@ -71,6 +71,8 @@ class LightGBMRankModel(object):
             raise ImportError(
                 "LightGBM support requires rec-algorithm[lightgbm]"
             ) from error
+        self.early_stopping_rounds = int(params.pop("early_stopping_rounds", 50))
+        self.eval_at = tuple(params.pop("eval_at", (1, 5, 10, 20)))
         defaults = {
             "objective": "lambdarank",
             "n_estimators": 500,
@@ -102,11 +104,14 @@ class LightGBMRankModel(object):
     def fit(self, features, labels, group_ids, validation=None):
         kwargs = {}
         if validation is not None:
+            from lightgbm import early_stopping, log_evaluation
             x_val, y_val, val_groups = validation
             kwargs.update(
                 eval_set=[(x_val, y_val)],
                 eval_group=[self.group_sizes(val_groups)],
-                eval_at=[5, 10],
+                eval_at=list(self.eval_at),
+                callbacks=[early_stopping(self.early_stopping_rounds, verbose=False),
+                           log_evaluation(period=0)],
             )
         self.model.fit(
             features, labels, group=self.group_sizes(group_ids), **kwargs

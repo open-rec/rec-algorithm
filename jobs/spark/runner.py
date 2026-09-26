@@ -20,6 +20,7 @@ ALGORITHMS = (
     "user_cf_u2u",
     "content_u2u",
     "user_emb_u2u",
+    "sparse",
 )
 PUBLISHABLE_ALGORITHMS = ALGORITHMS
 JOB_LOCK = threading.Lock()
@@ -102,6 +103,13 @@ def recall_command(payload):
         command.extend(
             ["--neighbour-size", str(payload.get("neighbour_size", 50))]
         )
+    if algorithm == "sparse":
+        columns = payload.get("text_columns", ["title", "category", "tags"])
+        if not isinstance(columns, list) or not columns or not all(
+                isinstance(value, str) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", value)
+                for value in columns):
+            raise ValueError("text_columns must be a non-empty list of column names")
+        command.extend(["--text-columns", ",".join(columns)])
     return command
 
 

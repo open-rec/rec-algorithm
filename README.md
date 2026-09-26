@@ -49,7 +49,7 @@ bash package.sh                              # -> dist/rec_algorithm-0.0.1-*.whl
 
 | Path | Contents |
 |---|---|
-| `algorithm/recall/` | Item and user recall strategies: CF, content similarity, hot/new, sequence embedding, and ALS-based U2U |
+| `algorithm/recall/` | Item and user recall strategies: CF, BM25 sparse text, content similarity, hot/new, sequence embedding, and ALS-based U2U |
 | `algorithm/rank/` | LR/FM/LightGBM rank models and a candidate-aware Transformer building block |
 | `algorithm/feature/` | feature encoders for users and items |
 | `algorithm/meta/` | table and column definitions — the source of truth for CSV headers |
@@ -104,6 +104,7 @@ Use `new` with `--item-table openrec.item_entity`. Output schemas are stable:
 - content_i2i: `scene, left_item, right_item, score`
 - user_cf_u2i: `scene, user, item, score`
 - item_seq_emb: `scene, item, vector`
+- sparse: `scene, item, text`
 - user_cf_u2u/content_u2u/user_emb_u2u: `scene, left_user, right_user, score`; the ALS job
   publishes to `user-als-emb` for the serving `user_als_emb` channel
 

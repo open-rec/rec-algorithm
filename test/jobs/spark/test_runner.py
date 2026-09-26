@@ -63,6 +63,17 @@ def test_runner_builds_publishable_complementary_recall_jobs(algorithm):
     assert "--publish" in command
 
 
+def test_runner_builds_sparse_document_job_with_selected_text_columns():
+    command = recall_command({
+        "algorithm": "sparse", "date": "2026-08-19",
+        "text_columns": ["title", "brand", "tags"],
+    })
+
+    assert command[command.index("--text-columns") + 1] == "title,brand,tags"
+    assert command[command.index("--output-path") + 1].endswith("/recall/sparse")
+    assert "--publish" in command
+
+
 @pytest.mark.parametrize(
     "payload",
     [
