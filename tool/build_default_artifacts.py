@@ -15,7 +15,7 @@ from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader, Subset
 
 from algorithm.feature.item_feature import ItemFeature
-from algorithm.feature.feature_catalog import FeatureCatalog
+from algorithm.feature.feature_catalog import FeatureCatalog, select_training_features
 from algorithm.feature.feature_space import FeatureSpace
 from algorithm.feature.user_feature import UserFeature
 from algorithm.rank.fm import FMRecModel
@@ -26,7 +26,7 @@ from tool.gen_recall_data import generate as generate_recall
 
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 10
+BUILD_VERSION = 11
 REQUIRED = (
     "rank/item/user_feature.csv", "rank/item/item_feature.csv",
     "rank/item/lr.features.json", "rank/item/fm.features.json",
@@ -94,6 +94,18 @@ def reusable_recall(model_root, inputs):
         return False
 
 
+def _bootstrap_space(model_type, target_type, users, candidates):
+    """Seed models use only features present in the deterministic CSV snapshot."""
+    catalog = FeatureCatalog.load()
+    supported = select_training_features(model_type, target_type)
+    selection = {}
+    for role, frame in (("user", users), ("candidate", candidates)):
+        selection[role] = [feature_id for feature_id in supported[role]
+                           if catalog.require(feature_id)["name"] in frame
+                           and frame[catalog.require(feature_id)["name"]].notna().any()]
+    return FeatureSpace.for_model(model_type, target_type, selection)
+
+
 def _train(model_class, model_type, users, candidates, feature_events, labels, cutoff, stage,
            epochs, factor_dim, min_auc, target_type="item"):
     model_file = stage / "rank" / target_type / (model_type + ".pth")
@@ -101,9 +113,13 @@ def _train(model_class, model_type, users, candidates, feature_events, labels, c
     kwargs = {"factor_dim": factor_dim} if model_type == "fm" else {}
     candidate_features = (ItemFeature(candidates, feature_events, cutoff) if target_type == "item"
                           else UserFeature(candidates, feature_events, cutoff))
-    model = model_class(UserFeature(users, feature_events, cutoff), candidate_features, labels,
+    user_features = UserFeature(users, feature_events, cutoff)
+    candidate_frame = (candidate_features.items if target_type == "item"
+                       else candidate_features.users)
+    space = _bootstrap_space(model_type, target_type, user_features.users, candidate_frame)
+    model = model_class(user_features, candidate_features, labels,
                         scene=target_type, model_file=model_file, feature_file=feature_file,
-                        target_type=target_type, **kwargs)
+                        target_type=target_type, feature_space=space, **kwargs)
     if not len(model.dataset) or model.dataset.positive_rate in (0.0, 1.0):
         raise ValueError("%s training requires non-empty click and unclicked-expose labels" % model_type)
     model.train(epoch_num=epochs, batch_size=256, val_ratio=.2)
@@ -120,6 +136,7 @@ def _train(model_class, model_type, users, candidates, feature_events, labels, c
         "target_type": target_type,
         "created_at": datetime.now(timezone.utc).isoformat(), "status": "evaluated",
         "feature_cutoff_time": cutoff, "model": model_file.name, "feature": feature_file.name,
+        "feature_selection": feature_space.selection,
         "feature_set": feature_space.feature_set, "catalog_version": feature_space.catalog_version,
         "catalog_sha256": feature_space.catalog_sha256,
         "feature_sha256": sha256(feature_file), "input_dim": model.model.dim,
@@ -150,9 +167,12 @@ def _train_lightgbm(users, candidates, feature_events, labels, cutoff, stage,
     candidate_features = (ItemFeature(candidates, feature_events, cutoff)
                           if target_type == "item"
                           else UserFeature(candidates, feature_events, cutoff))
-    feature_space = FeatureSpace.for_model("lightgbm", target_type)
+    user_features = UserFeature(users, feature_events, cutoff)
+    candidate_frame = (candidate_features.items if target_type == "item"
+                       else candidate_features.users)
+    feature_space = _bootstrap_space("lightgbm", target_type, user_features.users, candidate_frame)
     dataset = EventDataSet(
-        UserFeature(users, feature_events, cutoff), candidate_features, labels,
+        user_features, candidate_features, labels,
         feature_space=feature_space, target_type=target_type,
     )
     if not len(dataset) or dataset.positive_rate in (0.0, 1.0):
@@ -176,6 +196,7 @@ def _train_lightgbm(users, candidates, feature_events, labels, cutoff, stage,
         "created_at": datetime.now(timezone.utc).isoformat(), "status": "evaluated",
         "feature_cutoff_time": cutoff, "model": model_file.name,
         "feature": feature_file.name,
+        "feature_selection": dataset.feature_space.selection,
         "feature_set": dataset.feature_space.feature_set,
         "catalog_version": dataset.feature_space.catalog_version,
         "catalog_sha256": dataset.feature_space.catalog_sha256,

@@ -434,8 +434,8 @@ pytest -q test/algorithm/recall/test_item_cf_i2i_merge.py
 ### Selected global features
 
 `select_features(model_type, target_type, selection)` validates an ordered subset
-of the existing LR/FM capability declarations. `selection` has `user` and
-`candidate` lists; candidate features belong to the target entity. Omitting it
+of the LR/FM/LightGBM capability declarations. `selection` has required `user` and
+`candidate` lists and optional `session`, `context`, and `interaction` lists; candidate features belong to the target entity. Omitting it
 keeps the model's default feature set. `FeatureSpace.for_model(..., selection)`
 persists the selection and fingerprints of selected definitions alongside fitted
 encoders. Definition fingerprints include referenced policies. Adding an unrelated
@@ -457,3 +457,28 @@ When upgrading a shared model volume, Compose runs `rank-artifact-init` first to
 transfer release/training directory ownership from the former online writer to
 Spark. The online activation directory is unchanged. If starting the runner with
 `--no-deps`, run this initialization service explicitly first.
+
+
+### Dynamic feature rollout boundaries
+
+The feature catalog describes encoder capabilities. The runner's `/features`
+response additionally exposes `training_models`: features actually connected to
+its Spark release pipeline. `/features/validate`, `/jobs/rank/train`, and the
+Spark command line apply the same `select_training_features` gate. Omitted
+selections use user/candidate features; UTC hour/weekday context is opt-in and
+is derived from each label timestamp.
+
+Spark currently exports `sample_users.jsonl` and `sample_items.jsonl`, not session
+or interaction samples. Session aggregates, user-item interactions, candidate
+position/count, device type and subscription/authentication context therefore
+cannot be selected through this cluster pipeline yet. Model/experiment support
+for these roles remains available with explicitly materialized, sample-aligned
+inputs. The trainer rejects absent selected values instead of synthesizing zero
+columns. `sessionId`, `requestId`, and `position` survive ODS event reads; legacy
+typed event tables may omit these optional columns.
+
+Do not infer request candidate counts from the number of labelled events or use
+post-ranking display positions as pre-ranking candidate positions. Connecting
+these features requires logging the matching request/candidate context, exporting
+point-in-time dynamic sample files, and validating the corresponding online
+producer before expanding `training_models`.

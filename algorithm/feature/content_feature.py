@@ -11,7 +11,7 @@ def _epoch_seconds(values):
     missing = seconds.isna()
     if missing.any():
         parsed = pd.to_datetime(values[missing], errors="coerce", utc=True)
-        seconds.loc[missing] = parsed.astype("int64") / 1_000_000_000
+        seconds.loc[missing] = (parsed - pd.Timestamp("1970-01-01", tz="UTC")).dt.total_seconds()
         seconds.loc[missing & parsed.isna()] = np.nan
     return seconds
 

@@ -198,6 +198,12 @@ def test_feature_gateway_is_available_without_inference_service():
         )
         with urllib.request.urlopen(request) as response:
             assert json.load(response)["data"] == selection
+        request.data = json.dumps({"feature_selection": dict(
+            selection, session=["session.event_count"])}).encode()
+        with pytest.raises(urllib.error.HTTPError) as unavailable:
+            urllib.request.urlopen(request)
+        assert unavailable.value.code == 422
+        assert "unavailable in cluster training" in unavailable.value.read().decode()
         request.data = b'{"feature_selection": {}}'
         with pytest.raises(urllib.error.HTTPError) as error:
             urllib.request.urlopen(request)

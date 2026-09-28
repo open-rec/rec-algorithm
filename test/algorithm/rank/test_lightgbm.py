@@ -51,3 +51,14 @@ def test_binary_round_trip(tmp_path):
     assert np.isfinite(score).all()
     assert ((score >= 0) & (score <= 1)).all()
     assert np.allclose(score, restored)
+
+
+def test_binary_loader_rejects_ranking_objective(tmp_path):
+    from algorithm.rank.lightgbm import LightGBMBinaryModel, LightGBMRankModel
+    features = np.array([[0], [1], [2], [3]], dtype=float)
+    model = LightGBMRankModel(n_estimators=2, min_child_samples=1)
+    model.fit(features, np.array([0, 1, 0, 1]), np.array([0, 0, 1, 1]))
+    path = tmp_path / "ranker.txt"
+    model.save(path)
+    with pytest.raises(ValueError, match="binary objective"):
+        LightGBMBinaryModel.load(path)

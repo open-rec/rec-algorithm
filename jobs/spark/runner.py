@@ -114,7 +114,7 @@ def recall_command(payload):
 
 
 def rank_command(payload):
-    from algorithm.feature.feature_catalog import select_features
+    from algorithm.feature.feature_catalog import select_training_features
 
     business_date = payload.get("date")
     revision = payload.get("revision", "r001")
@@ -148,7 +148,7 @@ def rank_command(payload):
         or max_materialization_seconds < 1
     ):
         raise ValueError("invalid PIT materialization resource gate")
-    selection = select_features(
+    selection = select_training_features(
         model_type, target_type, payload.get("feature_selection")
     )
     return [
@@ -263,14 +263,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/features/validate":
-            from algorithm.feature.feature_catalog import select_features
+            from algorithm.feature.feature_catalog import select_training_features
 
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 info = json.loads(self.rfile.read(length) or b"{}")
                 if not isinstance(info, dict):
                     raise ValueError("configuration must be an object")
-                selection = select_features(
+                selection = select_training_features(
                     info.get("model_type", "lr"),
                     info.get("target_type", "item"),
                     info.get("feature_selection"),

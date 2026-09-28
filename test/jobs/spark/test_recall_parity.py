@@ -193,3 +193,75 @@ def test_spark_materializes_aligned_point_in_time_features(spark, publication, e
     item_rows = sorted(out_items.collect(), key=lambda row: row._sample_id)
     assert [row.event_count for row in item_rows] == [1.0, 2.0]
     assert [row.content_age_hours for row in item_rows] == pytest.approx(expected_ages)
+
+
+def test_behavior_resolves_latest_mutation_before_event_time_filter(spark):
+    from jobs.spark.point_in_time import _behavior
+    labels = spark.createDataFrame([("sample", "u", 100)],
+                                   "_sample_id string, user_id string, _label_time long")
+    history = spark.createDataFrame([
+        ("e", "u", "i", "s", "click", "2", 50, 60, "INSERT", "d", "t"),
+        ("e", "u", "i", "s", "click", "2", 150, 80, "UPDATE", "d", "t"),
+    ], "event_id string, user_id string, item_id string, scene string, type string, "
+       "value string, time long, _effective_time long, _operation string, dt string, trace_id string")
+    assert _behavior(labels, history, "user_id", "item_id").count() == 0
+
+
+def test_event_reader_preserves_new_optional_fields_and_old_typed_tables(spark):
+    from jobs.spark.io import read_entity, EVENT_FIELDS
+    spark.createDataFrame([('{"userId":"u","itemId":"i","sessionId":"s",'
+                            '"requestId":"r","position":3}',)], ["json"]).createOrReplaceTempView("audit_events")
+    row = read_entity(spark, "audit_events", EVENT_FIELDS).first()
+    assert (row.session_id, row.request_id, row.position) == ("s", "r", 3)
+    legacy = read_entity(spark, "audit_events", EVENT_FIELDS).drop(
+        "session_id", "request_id", "position")
+    legacy.createOrReplaceTempView("audit_legacy_events")
+    row = read_entity(spark, "audit_legacy_events", EVENT_FIELDS).first()
+    assert row.session_id is None and row.position is None
+
+
+def test_global_labels_without_event_id_keep_distinct_scene_identity(spark):
+    labels = spark.createDataFrame([
+        ("", "u", "i", scene, "expose", 100, "trace") for scene in ("a", "b")
+    ], ["event_id", "user_id", "item_id", "scene", "type", "time", "trace_id"])
+    history = spark.createDataFrame([], "event_id string, id string, user_id string, "
+        "item_id string, scene string, type string, value string, time long, trace_id string, "
+        "_operation string, _mutation_time long, _effective_time long, dt string")
+    users = spark.createDataFrame([("u", "INSERT", 1, 1, "d")],
+        ["id", "_operation", "_mutation_time", "_effective_time", "dt"])
+    items = spark.createDataFrame([("i", "INSERT", 1, 1, "d")],
+        ["id", "_operation", "_mutation_time", "_effective_time", "dt"])
+    rows, _, _ = materialize_point_in_time_samples_spark(labels, history, users, items)
+    actual = rows.select("_sample_id", "scene").collect()
+    assert len(actual) == 2
+    assert len({row._sample_id for row in actual}) == 2
+
+
+def test_user_candidate_behavior_uses_candidate_identity(spark):
+    from jobs.spark.point_in_time import _behavior
+    labels = spark.createDataFrame([("sample", "source", "candidate", 100)],
+        "_sample_id string, user_id string, item_id string, _label_time long")
+    history = spark.createDataFrame([
+        ("e1", "source", "i", "s", "click", "1", 50, 50, "INSERT", "d", "t1"),
+        ("e2", "candidate", "i", "s", "buy", "9", 60, 60, "INSERT", "d", "t2"),
+    ], "event_id string, user_id string, item_id string, scene string, type string, "
+       "value string, time long, _effective_time long, _operation string, dt string, trace_id string")
+    row = _behavior(labels, history, "user_id", "item_id", "item_id").first()
+    assert row.event_click_count == 0
+    assert row.event_buy_count == 1
+    assert row.event_value_sum == 9
+    from pyspark.sql import functions as F
+    full_labels = labels.withColumn("time", F.col("_label_time")).withColumn(
+        "type", F.lit("click")).withColumn("scene", F.lit("s")).withColumn(
+        "trace_id", F.lit("label")).drop("_sample_id", "_label_time")
+    users = spark.createDataFrame([
+        ("source", "INSERT", 0, "d"), ("candidate", "INSERT", 0, "d")
+    ], "id string, _operation string, _effective_time long, dt string")
+    items = spark.createDataFrame([("i", 30.0, "INSERT", 0, "d")],
+        "id string, price double, _operation string, _effective_time long, dt string")
+    _, _, candidates = materialize_point_in_time_samples_spark(
+        full_labels, history, users, items, target_type="user")
+    candidate = candidates.first()
+    assert candidate.event_buy_count == 1
+    assert candidate.event_click_count == 0
+    assert candidate.event_buy_price_mean == 30

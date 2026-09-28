@@ -70,3 +70,22 @@ def test_event_delete_only_affects_labels_after_its_mutation_time():
     _, sample_users, _ = materialize_point_in_time_samples(labels, behavior, users, items)
 
     assert sample_users["event_count"].tolist() == [1, 0]
+
+
+def test_user_candidate_includes_own_commerce_features():
+    from algorithm.feature.point_in_time import materialize_point_in_time_samples
+    labels = pd.DataFrame([{"user_id": "source", "item_id": "candidate",
+                            "type": "click", "time": 100}])
+    history = pd.DataFrame([
+        {"event_id": "e1", "user_id": "source", "item_id": "p", "scene": "s",
+         "type": "click", "time": 10, "value": 1},
+        {"event_id": "e2", "user_id": "candidate", "item_id": "p", "scene": "s",
+         "type": "buy", "time": 20, "value": 1},
+    ])
+    users = pd.DataFrame([{"id": "source"}, {"id": "candidate"}])
+    items = pd.DataFrame([{"id": "p", "price": 30, "category": "books"}])
+    _, _, candidates = materialize_point_in_time_samples(
+        labels, history, users, items, target_type="user")
+    assert candidates.iloc[0].event_buy_count == 1
+    assert candidates.iloc[0].event_click_count == 0
+    assert candidates.iloc[0].event_buy_price_mean == 30

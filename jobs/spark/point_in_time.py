@@ -31,19 +31,19 @@ def _as_of_entities(labels, history, label_key, prefix):
             F.col("h.%s" % name).alias(name) for name in profile_columns])
 
 
-def _behavior(labels, history, entity_key, counterpart_key):
+def _behavior(labels, history, entity_key, counterpart_key, label_key=None):
     keyed = history.withColumn("_event_key", _event_key(history))
     joined = labels.alias("l").join(
         keyed.alias("e"),
-        (F.col("l.%s" % entity_key) == F.col("e.%s" % entity_key))
-        & (F.col("e._effective_time") <= F.col("l._label_time"))
-        & (F.col("e.time") < F.col("l._label_time")), "left")
+        (F.col("l.%s" % (label_key or entity_key)) == F.col("e.%s" % entity_key))
+        & (F.col("e._effective_time") <= F.col("l._label_time")), "left")
     delete_order = F.when(F.upper(F.col("e._operation")) == "DELETE", 1).otherwise(0)
     latest = Window.partitionBy("l._sample_id", "e._event_key").orderBy(
         F.desc("e._effective_time"), F.desc(delete_order), F.desc("e.dt"))
     visible = joined.withColumn("_row", F.row_number().over(latest)).filter(
         (F.col("_row") == 1) & F.col("e._event_key").isNotNull()
-        & (F.upper(F.col("e._operation")) != "DELETE"))
+        & (F.upper(F.col("e._operation")) != "DELETE")
+        & (F.col("e.time") < F.col("l._label_time")))
     value = F.coalesce(F.col("e.value").cast("double"), F.lit(0.0))
     expressions = [
         F.count("e._event_key").cast("double").alias("event_count"),
@@ -115,7 +115,7 @@ def _ratio(numerator, denominator):
 
 def _enrich(labels, history, events, label_key, entity_key, counterpart_key):
     profiles = _as_of_entities(labels, history, label_key, entity_key)
-    behavior = _behavior(labels, events, entity_key, counterpart_key)
+    behavior = _behavior(labels, events, entity_key, counterpart_key, label_key)
     result = profiles.join(behavior, "_sample_id", "left")
     behavior_columns = [name for name in result.columns if name.startswith("event_")]
     return result.fillna(0.0, subset=behavior_columns)
@@ -127,14 +127,14 @@ def _commerce(labels, event_history, item_history):
     joined = labels.alias("l").join(
         keyed.alias("e"),
         (F.col("l.user_id") == F.col("e.user_id"))
-        & (F.col("e._effective_time") <= F.col("l._label_time"))
-        & (F.col("e.time") < F.col("l._label_time")), "left")
+        & (F.col("e._effective_time") <= F.col("l._label_time")), "left")
     event_delete_order = F.when(F.upper(F.col("e._operation")) == "DELETE", 1).otherwise(0)
     latest_event = Window.partitionBy("l._sample_id", "e._event_key").orderBy(
         F.desc("e._effective_time"), F.desc(event_delete_order), F.desc("e.dt"))
     visible = joined.withColumn("_event_row", F.row_number().over(latest_event)).filter(
         (F.col("_event_row") == 1) & F.col("e._event_key").isNotNull()
-        & (F.upper(F.col("e._operation")) != "DELETE"))
+        & (F.upper(F.col("e._operation")) != "DELETE")
+        & (F.col("e.time") < F.col("l._label_time")))
 
     contextual = visible.join(
         item_history.alias("p"),
@@ -227,7 +227,7 @@ def materialize_point_in_time_samples_spark(labels, event_history, user_history,
     if target_type not in ("item", "user"):
         raise ValueError("target_type must be item or user")
     fallback_identity = F.sha2(F.concat_ws(
-        "|", "user_id", "item_id", "type", F.col("time"), "trace_id"), 256)
+        "|", "user_id", "item_id", "scene", "type", F.col("time"), "trace_id"), 256)
     identity = (F.coalesce(F.when(F.length(F.trim(F.col("event_id"))) > 0,
                                   F.col("event_id")), fallback_identity)
                 if "event_id" in labels.columns else fallback_identity)
@@ -242,6 +242,10 @@ def materialize_point_in_time_samples_spark(labels, event_history, user_history,
     candidate_rows = _enrich(prepared, candidate_history, event_history,
                              "item_id", candidate_entity,
                              "item_id" if target_type == "user" else "user_id")
+    if target_type == "user":
+        candidate_rows = candidate_rows.join(_commerce(
+            prepared.withColumn("user_id", F.col("item_id")), event_history, item_history),
+            "_sample_id", "left")
     if target_type == "item":
         label_times = prepared.select("_sample_id", "_label_time")
         # coalesce handles null values, but Spark still resolves every column

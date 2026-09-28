@@ -58,6 +58,9 @@ class LightGBMBinaryModel(object):
         value = cls.__new__(cls)
         value.model = None
         value.booster = Booster(model_file=str(path))
+        objective = value.booster.dump_model().get("objective", "").split()[0]
+        if objective != "binary":
+            raise ValueError("binary scoring requires a binary objective, got %s" % objective)
         return value
 
 

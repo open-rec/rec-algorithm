@@ -23,7 +23,7 @@ from jobs.spark.io import (
     read_item_history,
     read_user_history,
 )
-from algorithm.feature.feature_catalog import select_features
+from algorithm.feature.feature_catalog import select_training_features
 
 from jobs.spark.point_in_time import materialize_point_in_time_samples_spark
 
@@ -67,7 +67,7 @@ def parser():
 
 
 def _validate(args):
-    args.feature_selection = select_features(
+    args.feature_selection = select_training_features(
         args.model_type, args.target_type, args.feature_selection
     )
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", args.date):

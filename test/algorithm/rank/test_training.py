@@ -123,3 +123,32 @@ def test_existing_release_is_immutable(tmp_path):
         trainer.train_release(training_request(dataset), releases)
     assert manifest.read_text() == '{"version": "retained"}'
     assert dataset.exists()
+
+
+def test_missing_selected_dynamic_features_cannot_be_silently_zero_filled(tmp_path):
+    dataset = tmp_path / "training" / "run"
+    dataset.mkdir(parents=True)
+    pd.DataFrame([{"_sample_id": "e", "user_id": "u", "item_id": "i",
+                   "time": 100, "type": "click"}]).to_json(
+                       dataset / "events.jsonl", orient="records", lines=True)
+    for name, row in (("users", {"id": "u", "age": 20}),
+                      ("items", {"id": "i", "weight": 1})):
+        pd.DataFrame([dict(row, _sample_id="e")]).to_json(
+            dataset / ("sample_%s.jsonl" % name), orient="records", lines=True)
+    request = training_request(dataset).model_copy(update={"feature_selection": {
+        "user": ["user.age"], "candidate": ["item.weight"],
+        "session": ["session.event_count"],
+    }})
+    with pytest.raises(ValueError, match="no materialized values: session.event_count"):
+        trainer.train_release(request, tmp_path / "releases")
+
+
+@pytest.mark.parametrize("model_type", ["lr", "fm", "lightgbm"])
+def test_bootstrap_only_selects_materialized_seed_features(model_type):
+    from tool.build_default_artifacts import _bootstrap_space
+    users = pd.DataFrame([{"id": "u", "age": 20}])
+    items = pd.DataFrame([{"id": "i", "weight": 1}])
+    space = _bootstrap_space(model_type, "item", users, items).fit(users, items)
+    assert space.selection == {"user": ["user.age"], "candidate": ["item.weight"]}
+    assert space.context_width == 0 and space.session_width == 0
+    assert space.transform_candidates(users, items).shape == (1, space.dim)

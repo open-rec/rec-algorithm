@@ -291,3 +291,30 @@ def test_catalog_exposes_user_facing_taxonomy_and_scene_metadata():
             if feature["status"] == "stable"} == {
         "interaction.user_item_click_count_log"
     }
+
+
+def test_cluster_capabilities_exclude_unmaterialized_dynamic_roles():
+    from algorithm.feature.feature_catalog import feature_catalog, select_training_features
+
+    payload = feature_catalog()
+    for model, targets in payload["training_models"].items():
+        for target, roles in targets.items():
+            assert not roles.get("session")
+            assert not roles.get("interaction")
+            assert "context.candidate_count" not in roles.get("context", [])
+            assert set(select_training_features(model, target)) == {"user", "candidate"}
+            selected = {"user": ["user.age"], "candidate": [
+                "item.weight" if target == "item" else "user.age"],
+                "context": ["context.request_hour_sin"]}
+            assert select_training_features(model, target, selected) == selected
+            selected["session"] = ["session.event_count"]
+            with pytest.raises(ValueError, match="unavailable in cluster training"):
+                select_training_features(model, target, selected)
+
+
+@pytest.mark.parametrize("invalid", [None, "", {}, False, 0])
+def test_optional_role_must_be_a_list(invalid):
+    from algorithm.feature.feature_catalog import select_features
+    with pytest.raises(ValueError, match="unique"):
+        select_features("lr", selection={"user": ["user.age"],
+                        "candidate": ["item.weight"], "session": invalid})

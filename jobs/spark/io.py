@@ -10,6 +10,7 @@ EVENT_FIELDS = {
     "id": "string", "event_id": "string", "user_id": "string", "item_id": "string", "trace_id": "string",
     "scene": "string", "type": "string", "value": "string", "time": "long",
     "ext_fields": "string",
+    "session_id": "string", "request_id": "string", "position": "int",
 }
 ITEM_FIELDS = {
     "id": "string", "title": "string", "category": "string",
@@ -24,6 +25,7 @@ USER_FIELDS = {
 }
 
 JSON_NAMES = {
+    "session_id": "sessionId", "request_id": "requestId",
     "event_id": "eventId", "user_id": "userId", "item_id": "itemId", "trace_id": "traceId",
     "pub_time": "pubTime", "modify_time": "modifyTime", "expire_time": "expireTime",
     "device_id": "deviceId", "register_time": "registerTime", "login_time": "loginTime",
@@ -80,6 +82,9 @@ def read_entity(spark, table, fields, date=None, cumulative=False, keep_partitio
         frame = frame.filter(F.col("dt") <= date if cumulative else F.col("dt") == date)
     partition = [F.col("dt")] if keep_partition and "dt" in frame.columns else []
     if "json" not in frame.columns:
+        optional = {"session_id", "request_id", "position"}
+        for name in optional.intersection(fields) - set(frame.columns):
+            frame = frame.withColumn(name, F.lit(None).cast(fields[name]))
         missing = set(fields) - set(frame.columns)
         if missing:
             raise ValueError("table %s misses columns: %s" % (table, sorted(missing)))

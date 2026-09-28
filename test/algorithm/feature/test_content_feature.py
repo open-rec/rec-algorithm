@@ -38,3 +38,12 @@ def test_hashed_title_is_fixed_width_deterministic_and_persisted():
     assert encoded.shape == (1, 33)
     assert np.count_nonzero(encoded[0, :32]) > 0
     np.testing.assert_array_equal(encoded, restored.transform_items(items))
+
+
+def test_iso_publish_time_uses_seconds_independent_of_pandas_resolution():
+    from algorithm.feature.content_feature import enrich_item_content_features
+    now = pd.Timestamp("2026-09-20T00:00:00Z").timestamp()
+    values = ["2026-09-19T00:00:00Z", str(int(now - 86400)),
+              str(int((now - 86400) * 1000)), None, "bad"]
+    result = enrich_item_content_features(pd.DataFrame({"pub_time": values}), now)
+    assert result.content_age_hours.tolist() == [24, 24, 24, 0, 0]

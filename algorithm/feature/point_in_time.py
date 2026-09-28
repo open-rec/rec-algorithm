@@ -151,6 +151,10 @@ def materialize_point_in_time_samples(events, feature_events, users, items,
             item_events, event["item_id"], label_time), item_entity, label_time)
         if target_type == "item":
             item_frame = enrich_item_content_features(item_frame, label_time)
+        else:
+            item_frame = enrich_user_commerce_features(
+                item_frame, _behavior_as_of(item_events, event["item_id"], label_time),
+                items, label_time)
         labels.append(event.to_dict())
         sample_users.append(user_frame.iloc[0].to_dict())
         sample_items.append(item_frame.iloc[0].to_dict())

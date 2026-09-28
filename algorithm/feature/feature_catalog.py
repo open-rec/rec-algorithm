@@ -157,27 +157,12 @@ def select_features(
     for role, definitions in roles.items():
         allowed = dict(definitions)
         ids = list(allowed) if selection is None else selection.get(role, [])
-        if families is not None:
-            unknown = set(families) - set(supported.payload.get("families", []))
-            if unknown:
-                raise ValueError("unknown feature families: %s" % sorted(unknown))
-            ids = [
-                value for value in ids
-                if allowed[value].get("family") in set(families)
-            ]
-        if scene is not None:
-            ids = [
-                value for value in ids
-                if "all" in allowed[value].get("scenes", ["all"])
-                or scene in allowed[value].get("scenes", [])
-            ]
-        if ((role in ("user", "candidate") and not ids) or (ids and (
-            not isinstance(ids, list)
-            or any(not isinstance(value, str) for value in ids)
-            or len(set(ids)) != len(ids)
-        ))):
+        if (not isinstance(ids, list)
+                or any(not isinstance(value, str) for value in ids)
+                or len(set(ids)) != len(ids)
+                or (role in ("user", "candidate") and not ids)):
             raise ValueError(
-                "%s features must be a unique nonempty list" % role
+                "%s features must be a unique list; user and candidate cannot be empty" % role
             )
         for feature_id in ids:
             if feature_id not in allowed:
@@ -195,12 +180,58 @@ def select_features(
                     "feature is not implemented online and offline: %s"
                     % feature_id
                 )
+        if families is not None:
+            unknown = set(families) - set(supported.payload.get("families", []))
+            if unknown:
+                raise ValueError("unknown feature families: %s" % sorted(unknown))
+            ids = [
+                value for value in ids
+                if allowed[value].get("family") in set(families)
+            ]
+        if scene is not None:
+            ids = [
+                value for value in ids
+                if "all" in allowed[value].get("scenes", ["all"])
+                or scene in allowed[value].get("scenes", [])
+            ]
+        if role in ("user", "candidate") and not ids:
+            raise ValueError("%s features must be a unique nonempty list" % role)
         # Keep the established two-role gateway response byte-for-byte
         # compatible when callers submit a legacy selection. Optional roles
         # become first-class only when they actually select features.
         if ids or role in ("user", "candidate"):
             result[role] = list(ids)
     return result
+
+
+# The distributed job currently exports user/candidate rows. Calendar context
+# is recoverable from the label timestamp; other dynamic roles require sample
+# files and/or request producers that this pipeline does not yet provide.
+TRAINING_CONTEXT = {
+    "context.request_hour_sin", "context.request_hour_cos",
+    "context.request_weekday_sin", "context.request_weekday_cos",
+}
+
+
+def select_training_features(model_type, target_type="item", selection=None):
+    supported = select_features(model_type, target_type)
+    available = {
+        role: ids if role in ("user", "candidate") else [
+            feature_id for feature_id in ids if feature_id in TRAINING_CONTEXT
+        ]
+        for role, ids in supported.items()
+    }
+    if selection is None:
+        # Preserve the established entity-only default; calendar context is opt-in.
+        selection = {role: available[role] for role in ("user", "candidate")}
+    resolved = select_features(model_type, target_type, selection)
+    for role, ids in resolved.items():
+        missing = set(ids) - set(available.get(role, []))
+        if missing:
+            raise ValueError(
+                "features unavailable in cluster training: %s" % sorted(missing)
+            )
+    return resolved
 
 
 def feature_catalog():
@@ -220,4 +251,12 @@ def feature_catalog():
         "scene_presets": catalog.payload.get("scene_presets", {}),
         "models": models,
         "availability": "declared_capability",
+        "training_models": {
+            model: {
+                target: {role: ids if role in ("user", "candidate") else [
+                    feature_id for feature_id in ids if feature_id in TRAINING_CONTEXT
+                ] for role, ids in roles.items()}
+                for target, roles in targets.items()
+            } for model, targets in models.items()
+        },
     }

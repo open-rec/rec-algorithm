@@ -25,7 +25,8 @@ def materialize_request_context(context=None, candidate_ids=None, request_time=N
         row.update(candidate_contexts.get(str(candidate_id), {}) or {})
         row.setdefault("candidate_position", position)
         row.setdefault("candidate_count", count)
-        row.setdefault("position_ratio", position / max(1, count - 1))
+        row.setdefault("position_ratio", float(row["candidate_position"]) /
+                       max(1, float(row["candidate_count"]) - 1))
         row.setdefault("request_hour_sin", math.sin(2 * math.pi * instant.hour / 24))
         row.setdefault("request_hour_cos", math.cos(2 * math.pi * instant.hour / 24))
         row.setdefault("request_weekday_sin",
@@ -43,8 +44,11 @@ def materialize_session_features(events, as_of_time, session_id=None):
         frame["time"] = pd.Series(dtype=float)
     frame["time"] = pd.to_numeric(frame["time"], errors="coerce")
     frame = frame[frame["time"].notna() & (frame["time"] < as_of_time)]
-    if session_id is not None and "session_id" in frame:
-        frame = frame[frame["session_id"].fillna("").astype(str) == str(session_id)]
+    if session_id is not None:
+        if not str(session_id).strip() or "session_id" not in frame:
+            frame = frame.iloc[:0]
+        else:
+            frame = frame[frame["session_id"].fillna("").astype(str) == str(session_id)]
     types = frame.get("type", pd.Series("", index=frame.index)).fillna("").astype(str)
     values = pd.to_numeric(frame.get("value", pd.Series(0, index=frame.index)),
                            errors="coerce").fillna(0)
@@ -72,7 +76,7 @@ def candidate_interactions(events, candidate_ids, as_of_time):
     frame = frame[frame["time"].notna() & (frame["time"] < as_of_time)]
     clicks = frame[frame.get("type", pd.Series("", index=frame.index)) == "click"]
     rows = []
-    recent_items = (frame["item_id"].fillna("").astype(str)
+    recent_items = (frame.sort_values("time", kind="mergesort")["item_id"].fillna("").astype(str)
                     if "item_id" in frame else pd.Series(dtype=str))
     for candidate_id in candidate_ids:
         selected = clicks[clicks.get("item_id", pd.Series("", index=clicks.index)).astype(str)

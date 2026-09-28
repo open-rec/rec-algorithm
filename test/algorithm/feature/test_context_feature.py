@@ -38,3 +38,26 @@ def test_session_and_interaction_features_are_point_in_time():
     assert session["event_count"] == 1
     assert session["event_value_sum"] == 2
     assert interaction["user_item_click_count_log"] > 0
+
+
+def test_session_missing_identity_does_not_include_all_user_history():
+    events = pd.DataFrame([{"item_id": "i", "type": "click", "time": 10}])
+    assert materialize_session_features(events, 20, "s")["event_count"] == 0
+    events["session_id"] = ""
+    assert materialize_session_features(events, 20, "")["event_count"] == 0
+
+
+def test_position_ratio_uses_logged_candidate_context():
+    row = materialize_request_context(
+        {}, ["i"], 0, {"i": {"candidate_position": 3, "candidate_count": 5}}
+    ).iloc[0]
+    assert row.position_ratio == .75
+
+
+def test_candidate_recent_history_uses_event_time_order():
+    events = pd.DataFrame([
+        {"item_id": "recent", "type": "click", "time": 15},
+        {"item_id": "older", "type": "click", "time": 10},
+    ])
+    rows = candidate_interactions(events, ["recent", "older"], 20)
+    assert rows.candidate_seen_previous_1.tolist() == [1, 0]

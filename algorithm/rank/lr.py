@@ -92,7 +92,7 @@ class EventDataSet(Dataset):
         events = self.raw_events
         # A clicked impression normally has both expose and click events. Its
         # expose is not a
-        # negative label, but only trace_id can identify that pair reliably.
+        # negative label. Pair it within the same user/candidate/scene and trace.
         # Without it, repeated
         # events for the same user and item must remain independent training
         # observations.
@@ -104,7 +104,9 @@ class EventDataSet(Dataset):
             and labelled["trace_id"].fillna("").astype(str).ne("").any()
         )
         if has_trace_id:
-            identity = ["trace_id"]
+            identity = ["trace_id", "user_id", "item_id"]
+            if "scene" in labelled.columns:
+                identity.append("scene")
             valid_trace = labelled["trace_id"].fillna("").astype(str).ne("")
             clicked = labelled[(labelled["type"] == CLICK) & valid_trace][
                 identity

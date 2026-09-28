@@ -177,7 +177,10 @@ def train_release(info: TrainingRequest, artifact_root):
                 path = dataset / (name + ".jsonl")
                 if path.exists():
                     frame = read_records(path)
-                    if set(frame.get("_sample_id", [])) != set(events["_sample_id"]):
+                    if ("_sample_id" not in frame
+                            or frame["_sample_id"].isna().any()
+                            or frame["_sample_id"].duplicated().any()
+                            or set(frame["_sample_id"]) != set(events["_sample_id"])):
                         raise ValueError("%s rows do not match event samples" % name)
                     frame = frame.set_index("_sample_id").loc[
                         events["_sample_id"].tolist()].reset_index()
@@ -216,24 +219,6 @@ def train_release(info: TrainingRequest, artifact_root):
         space = FeatureSpace.for_model(
             info.model_type, info.target_type, selection
         )
-        # Older Spark materializations predate dynamic role files. Preserve
-        # their usability with explicit neutral rows; new jobs can publish the
-        # three optional sample_* files for point-in-time values.
-        def aligned_dynamic(frame):
-            return (frame.reset_index(drop=True) if len(frame) == len(events)
-                    else pd.DataFrame(index=range(len(events))))
-
-        sample_sessions = aligned_dynamic(sample_sessions)
-        sample_contexts = aligned_dynamic(sample_contexts)
-        sample_interactions = aligned_dynamic(sample_interactions)
-        for frame, columns in (
-            (sample_sessions, space.session_columns),
-            (sample_contexts, space.context_columns),
-            (sample_interactions, space.interaction_columns),
-        ):
-            for column in columns:
-                if column.name not in frame:
-                    frame[column.name] = 0
         for frame, columns in (
             (sample_users, space.user_columns),
             (sample_items, space.item_columns),

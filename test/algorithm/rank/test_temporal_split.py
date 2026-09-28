@@ -105,3 +105,22 @@ def test_feature_space_is_fitted_only_on_training_time_slice():
 
     assert city.categories == ["train"]
     assert age.mean == 20
+
+
+def test_clicked_candidate_does_not_remove_other_exposures_in_same_trace():
+    users = pd.DataFrame([{"id": "u", "age": 20}])
+    items = pd.DataFrame([{"id": "a", "weight": 1}, {"id": "b", "weight": 2}])
+    events = pd.DataFrame([
+        {"user_id": "u", "item_id": item, "trace_id": "request", "scene": scene,
+         "type": kind, "time": stamp}
+        for item, scene, kind, stamp in [("a", "home", "expose", 10),
+                                         ("b", "home", "expose", 10),
+                                         ("a", "other", "expose", 10),
+                                         ("a", "home", "click", 11)]
+    ])
+    model = LRRecModel(UserFeature(users), ItemFeature(items), events,
+                       feature_space=FeatureSpace.for_model("lr", selection={
+                           "user": ["user.age"], "candidate": ["item.weight"]}))
+    assert len(model.dataset.events) == 3
+    negatives = model.dataset.events[model.dataset.events.type == "expose"]
+    assert set(zip(negatives.item_id, negatives.scene)) == {("b", "home"), ("a", "other")}
