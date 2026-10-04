@@ -3,7 +3,7 @@
 [![CI](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml/badge.svg)](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.10.0-EE4C2C?logo=pytorch&logoColor=white)
-![Spark](https://img.shields.io/badge/Spark-3.5.3-E25A1C?logo=apachespark&logoColor=white)
+![Spark](https://img.shields.io/badge/Spark-4.0.4-E25A1C?logo=apachespark&logoColor=white)
 
 The offline side of open-rec: computes the recall tables and trains the rank model that the online
 service serves. It supports both one-machine development (pandas / gensim / torch) and scheduled
@@ -482,3 +482,9 @@ post-ranking display positions as pre-ranking candidate positions. Connecting
 these features requires logging the matching request/candidate context, exporting
 point-in-time dynamic sample files, and validating the corresponding online
 producer before expanding `training_models`.
+
+### Spark runtime compatibility
+
+The Spark extra and cluster runner use Spark 4.0.4 / Scala 2.13 with Java 21. The
+runner image must match the bigdata-platform master/workers; rebuild it when upgrading
+the platform. The separate PyTorch training interpreter and model contracts are unchanged.

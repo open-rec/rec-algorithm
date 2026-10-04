@@ -16,7 +16,7 @@ services:
     build:
       context: .
       args:
-        SPARK_IMAGE: ${SPARK_IMAGE:-openrec/spark:3.5.3}
+        SPARK_IMAGE: ${SPARK_IMAGE:-openrec/spark:4.0.4}
         TRAINING_BASE_IMAGE: ${RANK_TRAINING_BASE_IMAGE:-pytorch/pytorch:2.8.0-cuda12.9-cudnn9-runtime}
         TRAINING_PIP_INDEX_URL: ${RANK_TRAINING_PIP_INDEX_URL:-https://pypi.org/simple}
     image: openrec/rec-algorithm:latest

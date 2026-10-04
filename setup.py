@@ -10,10 +10,10 @@ setup(
     author_email='xsank@foxmail.com',
     extras_require={
         'lightgbm': ['lightgbm>=4.3,<5'],
-        'spark': ['pyspark==3.5.3'],
+        'spark': ['pyspark==4.0.4'],
         'publish': ['redis>=5,<9', 'elasticsearch>=8,<9'],
         'cluster': [
-            'pyspark==3.5.3', 'redis>=5,<9', 'elasticsearch>=8,<9',
+            'pyspark==4.0.4', 'redis>=5,<9', 'elasticsearch>=8,<9',
             'pydantic>=2.7,<3', 'lightgbm>=4.3,<5',
         ],
     },

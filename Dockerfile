@@ -1,4 +1,4 @@
-ARG SPARK_IMAGE=openrec/spark:3.5.3
+ARG SPARK_IMAGE=openrec/spark:4.0.4
 ARG TRAINING_BASE_IMAGE=pytorch/pytorch:2.8.0-cuda12.9-cudnn9-runtime
 FROM ${TRAINING_BASE_IMAGE} AS training
 ARG TRAINING_PIP_INDEX_URL=https://pypi.org/simple

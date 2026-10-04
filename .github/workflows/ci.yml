@@ -26,6 +26,11 @@ jobs:
         with:
           repository: open-rec/example
           path: example-fixture
+      - name: Set up Java 21 for Spark
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
