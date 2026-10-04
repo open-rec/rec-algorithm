@@ -116,8 +116,9 @@ items are collapsed to their latest mutation and latest `DELETE` tombstones are 
 recall algorithm then semi-joins its events with this active item snapshot before scoring, so
 deleted items do not consume hot/`item_cf_i2i`/`user_cf_u2i`/`item_seq_emb` resources or get published online.
 In cluster mode the runner reads the daily ODS directories directly with `--event-path` and
-`--item-path`. This preserves Hive-style partition discovery while avoiding the incompatible Hive 4
-metastore API in Spark 3.5. Result data is written beneath `--output-path`, remains partitioned by
+`--item-path`. This preserves Hive-style partition discovery and reads source data directly from
+HDFS without requiring metastore table reads. The runner uses Spark 4.0.4. Result data is written
+beneath `--output-path`, remains partitioned by
 the requested day, and uses dynamic partition overwrite so rerunning one day does not rewrite other
 result partitions. Table-based reads and writes remain available for compatible metastores.
 
