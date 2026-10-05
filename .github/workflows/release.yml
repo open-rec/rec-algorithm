@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate version and create source archive
+        shell: bash
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+          test -s RELEASE_NOTES.md
+          [[ "${version}" != *-dev ]]
+          archive="${REPOSITORY_NAME}-${version}.tar.gz"
+          git archive --format=tar.gz --prefix="${REPOSITORY_NAME}-${version}/" -o "${RUNNER_TEMP}/${archive}" HEAD
+          cd "${RUNNER_TEMP}"
+          sha256sum "${archive}" > "${archive}.sha256"
+      - name: Publish release notes and source assets
+        uses: softprops/action-gh-release@v3
+        with:
+          body_path: RELEASE_NOTES.md
+          fail_on_unmatched_files: true
+          files: |
+            ${{ runner.temp }}/*.tar.gz
+            ${{ runner.temp }}/*.tar.gz.sha256

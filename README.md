@@ -1,5 +1,7 @@
 # OpenRec Algorithms
 
+[Release v0.1.0](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md)
+
 [![CI](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml/badge.svg)](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.10.0-EE4C2C?logo=pytorch&logoColor=white)
@@ -12,7 +14,7 @@ cluster execution (Hive / Spark), with the same recall formulas and serving sche
 It plays two roles:
 
 - **a batch tool** — generate recall tables as CSV, which [example/init](https://github.com/open-rec/openrec/tree/master/init) loads into Redis and Elasticsearch
-- **a library** — [rank-engine](https://github.com/open-rec/rank-engine) imports `LRModel`, `UserFeature` and `ItemFeature` from it at serving time, pinned as `rec-algorithm==0.0.1`
+- **a library** — [rank-engine](https://github.com/open-rec/rank-engine) imports `LRModel`, `UserFeature` and `ItemFeature` from it at serving time, pinned as `rec-algorithm==0.1.0`
 
 ## install
 
