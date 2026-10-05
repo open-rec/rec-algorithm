@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, 'release/**']
 
 permissions:
   contents: read
@@ -24,7 +24,8 @@ jobs:
       - name: Check out deterministic test fixtures
         uses: actions/checkout@v7
         with:
-          repository: open-rec/example
+          repository: open-rec/openrec
+          ref: 88d1e429efbd098e960d233cf5b31573b2ff2323
           path: example-fixture
       - name: Set up Java 21 for Spark
         uses: actions/setup-java@v5
