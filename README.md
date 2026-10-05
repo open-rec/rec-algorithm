@@ -11,7 +11,7 @@ cluster execution (Hive / Spark), with the same recall formulas and serving sche
 
 It plays two roles:
 
-- **a batch tool** — generate recall tables as CSV, which [example/init](https://github.com/open-rec/example/tree/master/init) loads into Redis and Elasticsearch
+- **a batch tool** — generate recall tables as CSV, which [example/init](https://github.com/open-rec/openrec/tree/master/init) loads into Redis and Elasticsearch
 - **a library** — [rank-engine](https://github.com/open-rec/rank-engine) imports `LRModel`, `UserFeature` and `ItemFeature` from it at serving time, pinned as `rec-algorithm==0.0.1`
 
 ## install
