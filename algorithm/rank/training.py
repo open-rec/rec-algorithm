@@ -113,6 +113,17 @@ def _latest_feature_rows(events, rows):
     )
 
 
+def _read_records(path):
+    files = sorted(path.glob("part-*.json")) if path.is_dir() else [path]
+    # Preserve schema-defined numeric times and features instead of guessing dates.
+    frames = [
+        pd.read_json(value, lines=True, convert_dates=False, dtype=False)
+        for value in files
+        if value.stat().st_size
+    ]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
 def train_release(info: TrainingRequest, artifact_root):
     """Train on CPU and atomically retain an evaluated, immutable release."""
     threads = int(os.environ.get("RANK_TRAINING_THREADS", "2"))
@@ -139,22 +150,7 @@ def train_release(info: TrainingRequest, artifact_root):
     )
     try:
 
-        def read_records(path):
-            files = (
-                sorted(path.glob("part-*.json")) if path.is_dir() else [path]
-            )
-            frames = [
-                pd.read_json(value, lines=True)
-                for value in files
-                if value.stat().st_size
-            ]
-            return (
-                pd.concat(frames, ignore_index=True)
-                if frames
-                else pd.DataFrame()
-            )
-
-        events = read_records(dataset / "events.jsonl")
+        events = _read_records(dataset / "events.jsonl")
         model_type = info.model_type.strip().lower()
         model_filename = (
             "lightgbm.txt" if model_type == "lightgbm" else "%s.pth" % model_type
@@ -167,8 +163,8 @@ def train_release(info: TrainingRequest, artifact_root):
             {"factor_dim": info.factor_dim} if model_type == "fm" else {}
         )
         if (dataset / "sample_users.jsonl").exists():
-            sample_users = read_records(dataset / "sample_users.jsonl")
-            sample_items = read_records(dataset / "sample_items.jsonl")
+            sample_users = _read_records(dataset / "sample_users.jsonl")
+            sample_items = _read_records(dataset / "sample_items.jsonl")
             sample_users, sample_items = _align_materialized_rows(
                 events, sample_users, sample_items
             )
@@ -176,7 +172,7 @@ def train_release(info: TrainingRequest, artifact_root):
             for name in ("sample_sessions", "sample_contexts", "sample_interactions"):
                 path = dataset / (name + ".jsonl")
                 if path.exists():
-                    frame = read_records(path)
+                    frame = _read_records(path)
                     if ("_sample_id" not in frame
                             or frame["_sample_id"].isna().any()
                             or frame["_sample_id"].duplicated().any()
@@ -195,9 +191,9 @@ def train_release(info: TrainingRequest, artifact_root):
                     for _, row in events.iterrows()
                 ], ignore_index=True)
         else:
-            feature_events = read_records(dataset / "feature_events.jsonl")
-            items = read_records(dataset / "items.jsonl")
-            users = read_records(dataset / "users.jsonl")
+            feature_events = _read_records(dataset / "feature_events.jsonl")
+            items = _read_records(dataset / "items.jsonl")
+            users = _read_records(dataset / "users.jsonl")
             (events, sample_users, sample_items, sample_sessions,
              sample_contexts, sample_interactions) = (
                 materialize_point_in_time_samples(

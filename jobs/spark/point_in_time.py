@@ -44,7 +44,9 @@ def _behavior(labels, history, entity_key, counterpart_key, label_key=None):
         (F.col("_row") == 1) & F.col("e._event_key").isNotNull()
         & (F.upper(F.col("e._operation")) != "DELETE")
         & (F.col("e.time") < F.col("l._label_time")))
-    value = F.coalesce(F.col("e.value").cast("double"), F.lit(0.0))
+    # Event values may contain JSON (for example legacy item exposures). Match
+    # the online/local feature contract even when Spark ANSI casting is enabled.
+    value = F.coalesce(F.expr("try_cast(e.value AS DOUBLE)"), F.lit(0.0))
     expressions = [
         F.count("e._event_key").cast("double").alias("event_count"),
         F.sum(value).alias("event_value_sum"), F.avg(value).alias("event_value_mean"),
@@ -192,7 +194,7 @@ def _commerce(labels, event_history, item_history):
                .when(F.col("e.type") == "collect", 3.0)
                .when(F.col("e.type") == "buy", 5.0)
                .when(F.col("e.type") == "stay",
-                     F.log1p(F.greatest(F.coalesce(F.col("e.value").cast("double"), F.lit(0.0)),
+                     F.log1p(F.greatest(F.coalesce(F.expr("try_cast(e.value AS DOUBLE)"), F.lit(0.0)),
                                         F.lit(0.0))))
                .otherwise(0.0))
     for field, output in (("category", "preferred_categories"),
