@@ -32,19 +32,22 @@ pip install -e ".[publish]"     # Redis/Elasticsearch publishing
 pip install -e ".[cluster]"     # complete distributed runtime
 ```
 
-Two directories are required at runtime and both are gitignored, so create them yourself:
+For local tests, copy the fixture into the gitignored data directory:
 
 ```shell
-mkdir -p model data/test
+mkdir -p data/test
 cp ../example/data/test/*.csv data/test/     # if you have the example repo checked out
 ```
 
-`model/` receives trained checkpoints, `data/` holds the CSV datasets.
+`data/` holds CSV datasets. Local model helpers save to `OPENREC_MODEL_HOME/rank/{scene}`
+when configured, otherwise to the sibling `model/rank/{scene}` if that store exists, or
+`rec-algorithm/model/rank/{scene}` as a fallback. The default scene is `default`; directories
+are created on demand. Runtime cluster releases use a separate artifact volume.
 
 Build the wheel that `rank-engine` depends on:
 
 ```shell
-bash package.sh                              # -> dist/rec_algorithm-0.0.1-*.whl
+bash package.sh                              # -> dist/rec_algorithm-0.1.0-*.whl
 ```
 
 ## layout
@@ -79,19 +82,19 @@ Run with the cluster's Spark installation:
 
 ```shell
 spark-submit --master spark://spark-master:7077 \
-  --py-files dist/rec_algorithm-0.0.1-py3-none-any.whl \
+  --py-files dist/rec_algorithm-0.1.0-py3-none-any.whl \
   jobs/spark/recall_job.py hot \
   --event-table openrec.event_entity \
   --date 2026-08-18 --output-table openrec.recall_hot --size 2000 --publish
 
 spark-submit --master spark://spark-master:7077 \
-  --py-files dist/rec_algorithm-0.0.1-py3-none-any.whl \
+  --py-files dist/rec_algorithm-0.1.0-py3-none-any.whl \
   jobs/spark/recall_job.py item_cf_i2i \
   --event-table openrec.event_entity \
   --date 2026-08-18 --output-table openrec.recall_item_cf_i2i --size 20 --publish
 
 spark-submit --master spark://spark-master:7077 \
-  --py-files dist/rec_algorithm-0.0.1-py3-none-any.whl \
+  --py-files dist/rec_algorithm-0.1.0-py3-none-any.whl \
   jobs/spark/recall_job.py item_seq_emb \
   --event-table openrec.event_entity \
   --date 2026-08-18 --output-table openrec.recall_item_seq_emb --vector-size 64 --publish \
@@ -359,8 +362,10 @@ scene and counterpart counts, first/last time, recency, 1/7/30-day counts, fixed
 event; production jobs should pass `--as-of-time` explicitly. Use a snapshot before the model label
 period to avoid target leakage.
 
-Serve a trained checkpoint with [rank-engine](https://github.com/open-rec/rank-engine); pre-trained
-Douban artifacts live in [model](https://github.com/open-rec/model).
+Serve a trained checkpoint with [rank-engine](https://github.com/open-rec/rank-engine); generated
+bootstrap artifacts for the deterministic example fixture live in
+[model](https://github.com/open-rec/model). Always deploy the fitted sidecar with its checkpoint;
+feature dimensions depend on that artifact, not a fixed dataset-wide constant.
 
 ## test
 
