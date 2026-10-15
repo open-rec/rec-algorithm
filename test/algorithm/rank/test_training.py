@@ -152,3 +152,29 @@ def test_bootstrap_only_selects_materialized_seed_features(model_type):
     assert space.selection == {"user": ["user.age"], "candidate": ["item.weight"]}
     assert space.context_width == 0 and space.session_width == 0
     assert space.transform_candidates(users, items).shape == (1, space.dim)
+
+
+@pytest.mark.parametrize("partitioned", [False, True])
+def test_json_records_preserve_numeric_time_features(tmp_path, partitioned):
+    import json
+    import numpy as np
+
+    path = tmp_path / "samples.jsonl"
+    if partitioned:
+        path.mkdir()
+        target = path / "part-00000.json"
+        (path / "part-empty.json").write_text("")
+    else:
+        target = path
+    target.write_text(json.dumps({
+        "id": "001", "time": 1792048287,
+        "event_first_time": 1792048000,
+        "event_recency_time": 1.7976931348623157e308,
+    }) + "\n")
+    with np.errstate(over="raise", invalid="raise"):
+        rows = trainer._read_records(path)
+    assert rows.loc[0, "id"] == "001"
+    assert rows.loc[0, "time"] == 1792048287
+    assert rows.loc[0, "event_first_time"] == 1792048000
+    assert rows.loc[0, "event_recency_time"] == pytest.approx(1.7976931348623157e308)
+    assert not pd.api.types.is_datetime64_any_dtype(rows["event_first_time"])
