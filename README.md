@@ -109,7 +109,7 @@ Use `new` with `--item-table openrec.item_entity`. Output schemas are stable:
 - content_i2i: `scene, left_item, right_item, score`
 - user_cf_u2i: `scene, user, item, score`
 - item_seq_emb: `scene, item, vector`
-- sparse: `scene, item, text`
+- text_search: `scene, item, text` or `scene, user, text` (`target_type=user`)
 - user_cf_u2u/content_u2u/user_als_u2u: `scene, left_user, right_user, score`; the ALS job
   publishes to `user-als-u2u` for the serving `user_als_u2u` channel
 
@@ -139,8 +139,8 @@ maximum number of loaded physical indexes. Scene remains a document field and qu
 is never part of the physical index name.
 
 Embedding publishes one versioned physical index per scene as
-`{scene}-item_seq_emb-index-{YYYYMMDD}-{revision}` and atomically moves the legacy serving name
-`{scene}-item_seq_emb-index` as an alias after document-count validation. The previous version is
+`{scene}-item-seq-emb-index-{YYYYMMDD}-{revision}` and atomically moves the legacy serving name
+`{scene}-item-seq-emb-index` as an alias after document-count validation. The previous version is
 retained for rollback instead of deleting the active vector index before a replacement is ready.
 
 Publishing the same date and revision again is idempotent when its document count matches. An
@@ -545,4 +545,36 @@ python -m tool.gen_text_embedding_data --item ../example/data/test/item.csv --ou
 该 Python 入口尚未接入 rec-server 的 HTTP 请求流程。
 
 离线全文检索数据统一输出为 `recall/item/text_search.csv` 和
-`recall/user/text_search.csv`。线上现有 `sparse` 算法和通道名称保持不变。
+`recall/user/text_search.csv`。离线算法名为 `text_search`，线上通道名为 `item_search` / `user_search`；item/user 分别发布到 `item-search` / `user-search`，
+user 任务设置 `target_type=user`，输出路径独立为 `user_text_search`。
+
+## Scheduled serving-index coverage
+
+| Graph | Serving table | Scheduled algorithm | Serving alias |
+|---|---|---|---|
+| item | hot / new | hot / new | `openrec-recall-{table}-active` |
+| item | item-cf-i2i / content-i2i / user-cf-u2i | item_cf_i2i / content_i2i / user_cf_u2i | `openrec-recall-{table}-active` |
+| item | item-seq-emb | item_seq_emb | `{scene}-item-seq-emb-index` |
+| item | item-search | text_search (item) | `openrec-recall-item-search-active` |
+| item | query-title-emb | query_title_emb | `query-title-emb-index` (global) |
+| user | user-cf-u2u / content-u2u / user-als-u2u | user_cf_u2u / content_u2u / user_als_u2u | `openrec-recall-{table}-active` |
+| user | user-search | text_search (user) | `openrec-recall-user-search-active` |
+
+`query_title_emb` reads the latest non-deleted item snapshot as of the business date,
+ignores scene, skips blank titles, and rejects duplicate global item IDs. It sends raw
+titles (no query instruction) to the configured vLLM `/v1/embeddings` endpoint, validates
+model, dimensions, indexes and finite nonzero vectors, then L2-normalizes the results.
+The output schema is `item,vector,dt`, saved under the `query_title_emb` HDFS output path.
+Spark caches generated vectors on executor disk during output and publication, avoiding
+repeated inference for each action. Long titles exceeding the server token limit fail
+the job; no partial candidate corpus is activated.
+
+The runner accepts `algorithm=query_title_emb`. Configure `EMBEDDING_ENDPOINT`,
+`EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, and optional `EMBEDDING_API_KEY` consistently
+with rec-server and rec-console. Offline batching uses `EMBEDDING_BATCH_SIZE=32`,
+`EMBEDDING_PARTITIONS=1`, and `EMBEDDING_BATCH_TIMEOUT_SECONDS=60` by default, independently
+of the online request timeout. Model paths and GPU loading remain owned by vLLM.
+
+rec-console prepares `openrec-recall-query-title-emb-YYYYMMDD-rNNN`, validates the staged
+count, blocks writes, and atomically activates the global alias. It retains at least two
+releases for rollback. The existing per-scene sequence-vector publisher remains separate.

@@ -1,6 +1,7 @@
 """CLI for scheduled Hive/Spark recall computation."""
 
 import argparse
+import os
 from datetime import datetime, timedelta, timezone
 
 from pyspark.sql import SparkSession
@@ -8,7 +9,7 @@ from pyspark.sql import functions as F
 
 from jobs.spark.io import keep_active_item_events, read_events, read_items, read_users, write_result
 from jobs.spark.recall import (content_i2i, content_u2u, hot, item_cf_i2i, item_seq_emb,
-                               new, sparse_documents, user_cf_u2i, user_cf_u2u, user_als_u2u)
+                               new, text_search_documents, user_cf_u2i, user_cf_u2u, user_als_u2u)
 from publisher.spark import publish_embedding, publish_recall
 
 
@@ -17,7 +18,8 @@ SERVING_TABLES = {
     "content_i2i": "content-i2i", "user_cf_u2i": "user-cf-u2i",
     "user_cf_u2u": "user-cf-u2u", "content_u2u": "content-u2u",
     "user_als_u2u": "user-als-u2u",
-    "sparse": "sparse",
+    "text_search": "item-search",
+    "query_title_emb": "query-title-emb",
 }
 
 
@@ -25,7 +27,7 @@ def parser():
     result = argparse.ArgumentParser(description="OpenRec distributed recall job")
     result.add_argument("algorithm", choices=("hot", "new", "item_cf_i2i", "item_seq_emb",
                                                "user_cf_u2i", "content_i2i", "user_cf_u2u",
-                                               "content_u2u", "user_als_u2u", "sparse"))
+                                               "content_u2u", "user_als_u2u", "text_search", "query_title_emb"))
     result.add_argument("--event-table", default="openrec.event_entity")
     result.add_argument("--item-table", default="openrec.item_entity")
     result.add_argument("--event-path")
@@ -42,7 +44,8 @@ def parser():
     result.add_argument("--vector-size", type=int, default=10)
     result.add_argument("--min-count", type=int, default=5)
     result.add_argument("--neighbour-size", type=int, default=50)
-    result.add_argument("--text-columns", default="title,category,tags")
+    result.add_argument("--target-type", choices=("item", "user"), default="item")
+    result.add_argument("--text-columns")
     result.add_argument("--publish", action="store_true")
     result.add_argument("--redis-host", default="redis")
     result.add_argument("--redis-port", type=int, default=6379)
@@ -67,9 +70,29 @@ def run(args, spark=None):
                        path=args.item_path)
     if args.algorithm == "new":
         output = new(items, args.size)
-    elif args.algorithm == "sparse":
-        columns = tuple(value.strip() for value in args.text_columns.split(",") if value.strip())
-        output = sparse_documents(items, columns)
+    elif args.algorithm == "query_title_emb":
+        from jobs.spark.title_embedding import title_embeddings
+        from pyspark import StorageLevel
+        output = title_embeddings(
+            items, os.getenv("EMBEDDING_ENDPOINT", "http://vllm:8000/v1/embeddings"),
+            os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B"),
+            int(os.getenv("EMBEDDING_DIMENSIONS", "1024")), os.getenv("EMBEDDING_API_KEY", ""),
+            int(os.getenv("EMBEDDING_BATCH_SIZE", "32")),
+            int(os.getenv("EMBEDDING_PARTITIONS", "1")),
+            float(os.getenv("EMBEDDING_BATCH_TIMEOUT_SECONDS", "60")))
+    elif args.algorithm == "text_search":
+        target = args.target_type
+        defaults = "name,gender,country,city,tags" if target == "user" else "title,category,tags"
+        columns = tuple(value.strip() for value in (args.text_columns or defaults).split(",") if value.strip())
+        documents = items
+        if target == "user":
+            events = keep_active_item_events(read_events(
+                spark, args.event_table, args.date, cumulative=True, path=args.event_path), items)
+            users = read_users(spark, args.user_table, args.date, cumulative=True, path=args.user_path)
+            scenes = events.filter(F.col("type") == args.event_type).select(
+                "scene", F.col("user_id").alias("id")).dropDuplicates()
+            documents = users.join(scenes, "id")
+        output = text_search_documents(documents, columns, target)
     elif args.algorithm == "content_i2i":
         output = content_i2i(items, args.size)
     else:
@@ -96,22 +119,29 @@ def run(args, spark=None):
             output = item_seq_emb(events, args.vector_size, args.min_count,
                                   event_type=args.event_type)
     output = output.withColumn("dt", F.lit(args.date))
-    if args.output_table or args.output_path:
-        write_result(output, args.output_table, args.output_path, args.mode)
-    if args.publish:
-        if args.algorithm == "item_seq_emb":
-            publish_embedding(output, [args.es_host], args.es_user, args.es_password,
-                              ca_certs=args.es_ca_certs,
-                              verify_certs=bool(args.es_ca_certs),
-                              business_date=args.date, revision=args.revision,
-                              max_index_versions=args.max_index_versions)
-        else:
-            publish_recall(output, SERVING_TABLES[args.algorithm], args.date, args.revision,
-                           [args.es_host], args.es_user, args.es_password,
-                           ca_certs=args.es_ca_certs,
-                           verify_certs=bool(args.es_ca_certs),
-                           console_url=args.console_url,
-                           max_index_versions=args.max_index_versions)
+    if args.algorithm == "query_title_emb":
+        output = output.persist(StorageLevel.DISK_ONLY)
+    try:
+        if args.output_table or args.output_path:
+            write_result(output, args.output_table, args.output_path, args.mode)
+        if args.publish:
+            if args.algorithm == "item_seq_emb":
+                publish_embedding(output, [args.es_host], args.es_user, args.es_password,
+                                  ca_certs=args.es_ca_certs,
+                                  verify_certs=bool(args.es_ca_certs),
+                                  business_date=args.date, revision=args.revision,
+                                  max_index_versions=args.max_index_versions)
+            else:
+                publish_recall(output, (args.target_type + "-search") if args.algorithm == "text_search"
+                               else SERVING_TABLES[args.algorithm], args.date, args.revision,
+                               [args.es_host], args.es_user, args.es_password,
+                               ca_certs=args.es_ca_certs,
+                               verify_certs=bool(args.es_ca_certs),
+                               console_url=args.console_url,
+                               max_index_versions=args.max_index_versions)
+    finally:
+        if args.algorithm == "query_title_emb":
+            output.unpersist()
     return output
 
 

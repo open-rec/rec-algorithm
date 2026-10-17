@@ -247,16 +247,16 @@ def content_i2i(items, cut_size=20, content_columns=("category", "tags", "title"
         .select("scene", "left_item", "right_item", "score")
 
 
-def sparse_documents(items, text_columns=("title", "category", "tags")):
-    """Build one generic full-text search document per active scene item."""
+def text_search_documents(items, text_columns=("title", "category", "tags"), entity_field="item"):
+    """Build one generic full-text search document per scene-scoped item or user."""
     available = [column for column in text_columns if column in items.columns]
     frame = items.filter(F.col("scene").isNotNull() & F.col("id").isNotNull()) \
         .dropDuplicates(["scene", "id"])
     if not available:
-        return frame.select("scene", F.col("id").alias("item")) \
+        return frame.select("scene", F.col("id").alias(entity_field)) \
             .withColumn("text", F.lit(""))
     values = [F.coalesce(F.col(column).cast("string"), F.lit("")) for column in available]
-    return frame.select("scene", F.col("id").alias("item"),
+    return frame.select("scene", F.col("id").alias(entity_field),
                         F.concat_ws(" ", *values).alias("text"))
 
 

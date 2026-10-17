@@ -65,12 +65,12 @@ def test_runner_builds_publishable_complementary_recall_jobs(algorithm):
 
 def test_runner_builds_sparse_document_job_with_selected_text_columns():
     command = recall_command({
-        "algorithm": "sparse", "date": "2026-08-19",
+        "algorithm": "text_search", "date": "2026-08-19",
         "text_columns": ["title", "brand", "tags"],
     })
 
     assert command[command.index("--text-columns") + 1] == "title,brand,tags"
-    assert command[command.index("--output-path") + 1].endswith("/recall/sparse")
+    assert command[command.index("--output-path") + 1].endswith("/recall/text_search")
     assert "--publish" in command
 
 
@@ -212,3 +212,10 @@ def test_feature_gateway_is_available_without_inference_service():
         httpd.shutdown()
         httpd.server_close()
         thread.join(timeout=5)
+
+
+def test_user_search_has_separate_output_and_target():
+    command = recall_command({"algorithm": "text_search", "target_type": "user", "date": "2026-10-17"})
+    assert command[command.index("--target-type") + 1] == "user"
+    assert command[command.index("--output-path") + 1].endswith("/recall/user_text_search")
+    assert command[command.index("--text-columns") + 1] == "name,gender,country,city,tags"

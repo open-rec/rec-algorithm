@@ -20,7 +20,8 @@ ALGORITHMS = (
     "user_cf_u2u",
     "content_u2u",
     "user_als_u2u",
-    "sparse",
+    "text_search",
+    "query_title_emb",
 )
 PUBLISHABLE_ALGORITHMS = ALGORITHMS
 JOB_LOCK = threading.Lock()
@@ -36,7 +37,11 @@ def recall_command(payload):
         raise ValueError("date must use YYYY-MM-DD")
     if not re.match(r"^r\d{3,}$", revision):
         raise ValueError("revision must look like r001")
-    output_table = payload.get("output_table", "openrec.recall_%s" % algorithm)
+    target_type = payload.get("target_type", "item")
+    if target_type not in ("item", "user"):
+        raise ValueError("target_type must be item or user")
+    output_name = "user_text_search" if algorithm == "text_search" and target_type == "user" else algorithm
+    output_table = payload.get("output_table", "openrec.recall_%s" % output_name)
     if not re.match(r"^[A-Za-z_][A-Za-z0-9_.]*$", output_table):
         raise ValueError("invalid output table")
     command = [
@@ -72,7 +77,7 @@ def recall_command(payload):
             "OPENREC_RECALL_PATH", "hdfs://namenode:8020/openrec/hive/recall"
         )
         + "/"
-        + algorithm,
+        + output_name,
         "--es-host",
         "https://elasticsearch:9200",
         "--es-user",
@@ -103,8 +108,10 @@ def recall_command(payload):
         command.extend(
             ["--neighbour-size", str(payload.get("neighbour_size", 50))]
         )
-    if algorithm == "sparse":
-        columns = payload.get("text_columns", ["title", "category", "tags"])
+    if algorithm == "text_search":
+        command.extend(["--target-type", target_type])
+        defaults = ["name", "gender", "country", "city", "tags"] if target_type == "user" else ["title", "category", "tags"]
+        columns = payload.get("text_columns", defaults)
         if not isinstance(columns, list) or not columns or not all(
                 isinstance(value, str) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", value)
                 for value in columns):

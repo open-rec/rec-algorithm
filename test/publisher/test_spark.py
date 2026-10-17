@@ -38,3 +38,22 @@ def test_publisher_refuses_empty_release_before_calling_console():
         except ValueError as error:
             assert "empty item-cf-i2i" in str(error)
     request.assert_not_called()
+
+
+def test_search_publishers_preserve_entity_and_text_without_score():
+    import sys
+    from types import SimpleNamespace
+    for entity in ("item", "user"):
+        kind = entity + "-search"
+        frame = Mock()
+        frame.count.return_value = 1
+        row = SimpleNamespace(scene="s", text="hello", **{entity: "id-1"})
+        frame.repartition.return_value.foreachPartition.side_effect = lambda write: write([row])
+        client = Mock()
+        actions = []
+        client.helpers.bulk.side_effect = lambda es, rows: actions.extend(rows)
+        with patch.dict(sys.modules, {"elasticsearch": client}), patch(
+                "publisher.spark._console_request", side_effect=[{"index": kind + "-staging"}, {}]):
+            publish_recall(frame, kind, "2026-10-17")
+        assert actions == [{"_index": kind + "-staging", "_id": "s:id-1",
+                            "_source": {"scene": "s", entity: "id-1", "text": "hello"}}]
