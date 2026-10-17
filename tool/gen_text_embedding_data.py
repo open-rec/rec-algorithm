@@ -15,14 +15,16 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def generate(item_file, output_dir, encoder=None, batch_size=32):
+def generate(item_file, output_dir, encoder=None, batch_size=32, include_content=False):
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
     encoder = encoder or TextEmbeddingEncoder()
     items = pd.read_csv(item_file, dtype=str).fillna("")
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
-    tables = {"item_title_emb": ["title"], "item_content_emb": ["title", "category", "tags"]}
+    tables = {"item_title_emb": ["title"]}
+    if include_content:
+        tables["item_content_emb"] = ["title", "category", "tags"]
     for name, columns in tables.items():
         texts = items[columns].agg(" ".join, axis=1).tolist()
         with (output / (name + ".csv")).open("w", newline="") as stream:
@@ -49,8 +51,9 @@ def main():
     parser.add_argument("--model", help="model ID; otherwise OPENREC_TEXT_EMBEDDING_MODEL")
     parser.add_argument("--revision", help="model revision; otherwise OPENREC_TEXT_EMBEDDING_REVISION")
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--include-content", action="store_true", help="also generate optional content vectors")
     args = parser.parse_args()
-    metadata = generate(args.item, args.output, TextEmbeddingEncoder(args.model, args.revision), args.batch_size)
+    metadata = generate(args.item, args.output, TextEmbeddingEncoder(args.model, args.revision), args.batch_size, args.include_content)
     print(json.dumps(metadata, indent=2))
 
 

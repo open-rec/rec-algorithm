@@ -31,7 +31,6 @@ def test_complete_scene_scoped_recall_and_algorithm_specific_vectors(tmp_path, m
     expected = {name.removeprefix("recall/") for name in REQUIRED if name.startswith("recall/") and name.endswith(".csv")}
     assert {str(path.relative_to(output)) for path in output.rglob("*.csv")} == expected
     for target, entity, vector_file in (("item", "item", "item_seq_emb"),
-                                         ("item", "item", "item_content_emb"),
                                          ("item", "item", "item_title_emb"),
                                          ("user", "user", "user_als_emb")):
         query = output / target / f"{vector_file}.csv"
@@ -47,6 +46,7 @@ def test_complete_scene_scoped_recall_and_algorithm_specific_vectors(tmp_path, m
     assert not (output / "user/query_embedding.csv").exists()
     assert not list(output.rglob("query_qwen_emb.csv"))
     assert not (output / "item/query_embedding.csv").exists()
+    assert not (output / "item/item_content_emb.csv").exists()
     assert not (output / "item/text_embedding.manifest.json").exists()
     for target, entity in (("item", "item"), ("user", "user")):
         assert not (output / target / "sparse.csv").exists()

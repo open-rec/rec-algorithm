@@ -499,7 +499,7 @@ the platform. The separate PyTorch training interpreter and model contracts are 
 
 ### Query embedding names
 
-Item language vectors are `item_content_emb.csv` and `item_title_emb.csv`; the old duplicate
+The default item language vectors are `item_title_emb.csv`; the old duplicate
 `query_embedding.csv` is removed. User factors remain `user_als_emb.csv`. `query_qwen_emb` identifies Qwen query-to-item recall from the Music CRS
 experiment: Qwen3-Embedding-8B, last-token pooling and normalized 4096D vectors. Its encoder
 runs upstream; `QueryQwenEmbeddingRecall` consumes matching precomputed vectors.
@@ -531,7 +531,8 @@ encoder; strategy and artifact names do. No other recall algorithm changes in th
 python -m tool.gen_text_embedding_data --item ../example/data/test/item.csv --output ../model/recall/item
 ```
 
-`item_title_emb.csv` 使用 title，`item_content_emb.csv` 使用 title/category/tags。
+默认仅生成 `item_title_emb.csv`（title）。显式增加 `--include-content` 可生成
+可选的 `item_content_emb.csv`（title/category/tags），该文件不随默认产物发布。
 生成器返回模型名称、实际 revision、维度、预处理和数据校验值，CLI 将其输出到日志，
 不再单独生成 Qwen 专属 manifest。
 不记录机器上的绝对路径。模型缓存可挂载至容器任意目录，并通过 `OPENREC_MODEL_CACHE` 指定。

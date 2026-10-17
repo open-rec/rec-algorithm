@@ -8,7 +8,7 @@ from pathlib import Path
 from algorithm.feature.feature_catalog import FeatureCatalog
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 17
+BUILD_VERSION = 18
 REQUIRED = tuple(
     f"rank/{target}/{family}/{name}"
     for target in ("item", "user")
@@ -18,7 +18,7 @@ REQUIRED = tuple(
                  + (("item_feature.csv",) if target == "item" else ())
 ) + tuple(f"recall/item/{name}.csv" for name in (
     "item_cf_i2i", "content_i2i", "user_cf_u2i", "hot", "new", "item_seq_emb",
-    "item_content_emb", "item_title_emb", "text_search",
+    "item_title_emb", "text_search",
 )) + tuple(f"recall/user/{name}.csv" for name in (
     "user_cf_u2u", "content_u2u", "user_als_u2u", "user_als_emb", "text_search",
 ))
