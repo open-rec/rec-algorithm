@@ -162,7 +162,7 @@ def content_u2u(users, size=100, content_columns=("gender", "country", "city", "
         .select("scene", "left_user", "right_user", "score")
 
 
-def user_emb_u2u(events, size=100, vector_size=32, max_iter=5, event_type="click"):
+def user_als_u2u(events, size=100, vector_size=32, max_iter=5, event_type="click"):
     """ALS user factors followed by cosine U2U nearest-neighbour generation."""
     frame = _events(events, event_type).filter(
         F.col("user_id").isNotNull() & F.col("item_id").isNotNull()).select(

@@ -13,7 +13,7 @@ from algorithm.recall.item_cf_i2i import ItemBasedI2I
 from algorithm.recall.new import New
 from algorithm.recall.user_cf_u2i import UserBasedCF
 from jobs.spark.recall import (content_i2i, content_u2u, hot, item_cf_i2i, item_seq_emb,
-                               new, user_cf_u2i, user_cf_u2u, user_emb_u2u)
+                               new, user_cf_u2i, user_cf_u2u, user_als_u2u)
 from jobs.spark.io import keep_active_item_events, read_events, read_items, write_result
 
 
@@ -77,7 +77,7 @@ def main():
     profile_u2u = content_u2u(spark.createDataFrame(
         user_rows, ["id", "scene", "city", "tags"]), 10).collect()
     assert any(row.left_user == "u1" and row.right_user == "u2" for row in profile_u2u)
-    embedded_u2u = user_emb_u2u(distributed_source, size=10, vector_size=2, max_iter=1).collect()
+    embedded_u2u = user_als_u2u(distributed_source, size=10, vector_size=2, max_iter=1).collect()
     assert embedded_u2u and all(row.left_user != row.right_user for row in embedded_u2u)
     vectors = item_seq_emb(distributed_source, vector_size=4, min_count=1, max_iter=1).collect()
     assert vectors and all(len(row.vector) == 4 and row.scene == "home" for row in vectors)

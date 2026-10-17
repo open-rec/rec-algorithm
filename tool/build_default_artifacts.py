@@ -25,23 +25,8 @@ from algorithm.rank.lr import EventDataSet
 from tool.gen_recall_data import generate as generate_recall
 
 
-SCHEMA_VERSION = 1
-BUILD_VERSION = 11
-REQUIRED = (
-    "rank/item/user_feature.csv", "rank/item/item_feature.csv",
-    "rank/item/lr.features.json", "rank/item/fm.features.json",
-    "rank/item/lightgbm.features.json",
-    "rank/user/user_feature.csv", "rank/user/lr.features.json",
-    "rank/user/fm.features.json", "rank/user/lightgbm.features.json",
-    "rank/item/lr.pth", "rank/item/fm.pth", "rank/item/lightgbm.txt",
-    "rank/item/lr.manifest.json", "rank/item/fm.manifest.json",
-    "rank/item/lightgbm.manifest.json",
-    "rank/user/lr.pth", "rank/user/fm.pth", "rank/user/lightgbm.txt",
-    "rank/user/lr.manifest.json", "rank/user/fm.manifest.json",
-    "rank/user/lightgbm.manifest.json",
-    "recall/item_cf_i2i.csv", "recall/content_i2i.csv", "recall/user_cf_u2i.csv",
-    "recall/hot.csv", "recall/new.csv", "recall/item_seq_emb.csv",
-)
+from tool.check_default_artifacts import SCHEMA_VERSION, BUILD_VERSION, REQUIRED
+
 RECALL_REQUIRED = tuple(name for name in REQUIRED if name.startswith("recall/"))
 
 
@@ -108,8 +93,8 @@ def _bootstrap_space(model_type, target_type, users, candidates):
 
 def _train(model_class, model_type, users, candidates, feature_events, labels, cutoff, stage,
            epochs, factor_dim, min_auc, target_type="item"):
-    model_file = stage / "rank" / target_type / (model_type + ".pth")
-    feature_file = stage / "rank" / target_type / (model_type + ".features.json")
+    model_file = stage / "rank" / target_type / model_type / (model_type + ".pth")
+    feature_file = stage / "rank" / target_type / model_type / (model_type + ".features.json")
     kwargs = {"factor_dim": factor_dim} if model_type == "fm" else {}
     candidate_features = (ItemFeature(candidates, feature_events, cutoff) if target_type == "item"
                           else UserFeature(candidates, feature_events, cutoff))
@@ -145,7 +130,7 @@ def _train(model_class, model_type, users, candidates, feature_events, labels, c
                     **({"factor_dim": model.model.factor_dim} if model_type == "fm" else {})},
         "gate": {"min_auc": min_auc, "passed": True},
     }
-    (stage / "rank" / target_type / (model_type + ".manifest.json")).write_text(
+    (stage / "rank" / target_type / model_type / (model_type + ".manifest.json")).write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
 
@@ -162,8 +147,8 @@ def _lightgbm_matrix(dataset, indices, batch_size=4096):
 def _train_lightgbm(users, candidates, feature_events, labels, cutoff, stage,
                     min_auc, target_type="item"):
     """Train a binary LightGBM default artifact over the shared FeatureSpace."""
-    model_file = stage / "rank" / target_type / "lightgbm.txt"
-    feature_file = stage / "rank" / target_type / "lightgbm.features.json"
+    model_file = stage / "rank" / target_type / "lightgbm" / "lightgbm.txt"
+    feature_file = stage / "rank" / target_type / "lightgbm" / "lightgbm.features.json"
     candidate_features = (ItemFeature(candidates, feature_events, cutoff)
                           if target_type == "item"
                           else UserFeature(candidates, feature_events, cutoff))
@@ -206,7 +191,7 @@ def _train_lightgbm(users, candidates, feature_events, labels, cutoff, stage,
                     "n_estimators": 300},
         "gate": {"min_auc": min_auc, "passed": True},
     }
-    (stage / "rank" / target_type / "lightgbm.manifest.json").write_text(
+    (stage / "rank" / target_type / "lightgbm" / "lightgbm.manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
 
@@ -244,8 +229,8 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
     model_root.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".default-build-", dir=str(model_root)))
     try:
-        for relative in ("rank/item", "rank/user", "recall"):
-            (stage / relative).mkdir(parents=True)
+        for name in REQUIRED:
+            (stage / name).parent.mkdir(parents=True, exist_ok=True)
         users = pd.read_csv(data_dir / "user.csv")
         items = pd.read_csv(data_dir / "item.csv")
         events = pd.read_csv(data_dir / "event.csv")
@@ -260,9 +245,10 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
         item_snapshot = ItemFeature(items, feature_events, cutoff).items.copy()
         user_snapshot.insert(1, "as_of_time", cutoff)
         item_snapshot.insert(1, "as_of_time", cutoff)
-        user_snapshot.to_csv(stage / "rank/item/user_feature.csv", index=False)
-        item_snapshot.to_csv(stage / "rank/item/item_feature.csv", index=False)
-        user_snapshot.to_csv(stage / "rank/user/user_feature.csv", index=False)
+        for family in ("lr", "fm", "lightgbm"):
+            user_snapshot.to_csv(stage / "rank/item" / family / "user_feature.csv", index=False)
+            item_snapshot.to_csv(stage / "rank/item" / family / "item_feature.csv", index=False)
+            user_snapshot.to_csv(stage / "rank/user" / family / "user_feature.csv", index=False)
         _train(LRRecModel, "lr", users, items, feature_events, labels, cutoff, stage,
                epochs, factor_dim, min_auc, "item")
         _train(FMRecModel, "fm", users, items, feature_events, labels, cutoff, stage,
@@ -280,7 +266,8 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
             for name in RECALL_REQUIRED:
                 shutil.copy2(model_root / name, stage / name)
         else:
-            generate_recall(data_dir / "item.csv", data_dir / "event.csv", stage / "recall")
+            generate_recall(data_dir / "item.csv", data_dir / "event.csv", stage / "recall",
+                            user_file=data_dir / "user.csv")
 
         outputs = {name: sha256(stage / name) for name in REQUIRED}
         manifest = {"schema_version": SCHEMA_VERSION, "build_version": BUILD_VERSION,

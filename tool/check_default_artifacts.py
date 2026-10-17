@@ -8,22 +8,20 @@ from pathlib import Path
 from algorithm.feature.feature_catalog import FeatureCatalog
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 11
-REQUIRED = (
-    "rank/item/user_feature.csv", "rank/item/item_feature.csv",
-    "rank/item/lr.features.json", "rank/item/fm.features.json",
-    "rank/item/lightgbm.features.json",
-    "rank/user/user_feature.csv", "rank/user/lr.features.json",
-    "rank/user/fm.features.json", "rank/user/lightgbm.features.json",
-    "rank/item/lr.pth", "rank/item/fm.pth", "rank/item/lightgbm.txt",
-    "rank/item/lr.manifest.json", "rank/item/fm.manifest.json",
-    "rank/item/lightgbm.manifest.json",
-    "rank/user/lr.pth", "rank/user/fm.pth", "rank/user/lightgbm.txt",
-    "rank/user/lr.manifest.json", "rank/user/fm.manifest.json",
-    "rank/user/lightgbm.manifest.json",
-    "recall/item_cf_i2i.csv", "recall/content_i2i.csv", "recall/user_cf_u2i.csv",
-    "recall/hot.csv", "recall/new.csv", "recall/item_seq_emb.csv",
-)
+BUILD_VERSION = 17
+REQUIRED = tuple(
+    f"rank/{target}/{family}/{name}"
+    for target in ("item", "user")
+    for family in ("lr", "fm", "lightgbm")
+    for name in (f"{family}.{'txt' if family == 'lightgbm' else 'pth'}",
+                 f"{family}.features.json", f"{family}.manifest.json", "user_feature.csv")
+                 + (("item_feature.csv",) if target == "item" else ())
+) + tuple(f"recall/item/{name}.csv" for name in (
+    "item_cf_i2i", "content_i2i", "user_cf_u2i", "hot", "new", "item_seq_emb",
+    "item_content_emb", "item_title_emb", "text_search",
+)) + tuple(f"recall/user/{name}.csv" for name in (
+    "user_cf_u2u", "content_u2u", "user_als_u2u", "user_als_emb", "text_search",
+))
 
 
 def sha256(path):

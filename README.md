@@ -110,8 +110,8 @@ Use `new` with `--item-table openrec.item_entity`. Output schemas are stable:
 - user_cf_u2i: `scene, user, item, score`
 - item_seq_emb: `scene, item, vector`
 - sparse: `scene, item, text`
-- user_cf_u2u/content_u2u/user_emb_u2u: `scene, left_user, right_user, score`; the ALS job
-  publishes to `user-als-emb` for the serving `user_als_emb` channel
+- user_cf_u2u/content_u2u/user_als_u2u: `scene, left_user, right_user, score`; the ALS job
+  publishes to `user-als-u2u` for the serving `user_als_u2u` channel
 
 All source and result tables are partitioned by UTC `dt`. `--date` defaults to yesterday, so a
 daily scheduler can invoke the same command without calculating a date; passing it explicitly is
@@ -129,7 +129,7 @@ result partitions. Table-based reads and writes remain available for compatible 
 
 With `--publish`, non-vector algorithms are staged under their serving table names:
 `hot`, `new`, `item-cf-i2i`, `content-i2i`, `user-cf-u2i`, `user-cf-u2u`, `content-u2u`, and
-`user-als-emb`. Physical indexes use
+`user-als-u2u`. Physical indexes use
 `openrec-recall-{tableName}-{YYYYMMDD}-{revision}`. `rec-console` creates the staging index before
 Spark writes it, then verifies the document count, atomically moves
 `openrec-recall-{tableName}-active`, and removes versions beyond the configured retention after the
@@ -139,8 +139,8 @@ maximum number of loaded physical indexes. Scene remains a document field and qu
 is never part of the physical index name.
 
 Embedding publishes one versioned physical index per scene as
-`{scene}-item-vector-index-{YYYYMMDD}-{revision}` and atomically moves the legacy serving name
-`{scene}-item-vector-index` as an alias after document-count validation. The previous version is
+`{scene}-item_seq_emb-index-{YYYYMMDD}-{revision}` and atomically moves the legacy serving name
+`{scene}-item_seq_emb-index` as an alias after document-count validation. The previous version is
 retained for rollback instead of deleting the active vector index before a replacement is ready.
 
 Publishing the same date and revision again is idempotent when its document count matches. An
@@ -247,7 +247,7 @@ implement a `dump_*` method used to write the offline tables.
 | item_seq_emb | `EventEmbedding` | word2vec (gensim) over per-user item sequences; `dump_vectors` exports 10-dim vectors |
 | user_cf_u2u | Spark `user_cf_u2u` | inverse-popularity weighted shared-item similarity between users |
 | content_u2u | Spark `content_u2u` | profile-token Jaccard similarity between users |
-| user_emb_u2u | Spark `user_emb_u2u` | ALS latent user vectors, published under the `user-als-emb` serving name |
+| user_als_u2u | Spark `user_als_u2u` | Nearest users from ALS latent vectors, published under the `user-als-u2u` serving name |
 | hot | `Hot` | click counts normalized by the maximum |
 | new | `New` | freshness min-max normalized over the observed `pub_time` range, raised to `power` (31) |
 
@@ -496,3 +496,52 @@ producer before expanding `training_models`.
 The Spark extra and cluster runner use Spark 4.0.4 / Scala 2.13 with Java 21. The
 runner image must match the bigdata-platform master/workers; rebuild it when upgrading
 the platform. The separate PyTorch training interpreter and model contracts are unchanged.
+
+### Query embedding names
+
+Item language vectors are `item_content_emb.csv` and `item_title_emb.csv`; the old duplicate
+`query_embedding.csv` is removed. User factors remain `user_als_emb.csv`. `query_qwen_emb` identifies Qwen query-to-item recall from the Music CRS
+experiment: Qwen3-Embedding-8B, last-token pooling and normalized 4096D vectors. Its encoder
+runs upstream; `QueryQwenEmbeddingRecall` consumes matching precomputed vectors.
+
+`algorithm.recall.query_embedding.QueryEmbeddingRecall` remains the generic cosine API
+for existing sequence/history callers. A generic vector operation does not identify its
+encoder; strategy and artifact names do. No other recall algorithm changes in this rename.
+
+### 文本向量模型配置
+
+`algorithm.recall.text_embedding.TextEmbeddingEncoder` 通过模型名称加载 Qwen3 文本模型，
+离线 item 与在线调用方的 query 必须使用同一模型及 revision。
+当前默认名称为 `Qwen/Qwen3-Embedding-0.6B`，可以通过环境变量或生成器 `--model` 覆盖。
+此编码器使用 Qwen3 的 query instruction、last-token pooling 和 L2 归一化；
+更换其他模型家族时需要对应的编码实现，不能仅替换名称沿用 Qwen3 的预处理。
+
+| 环境变量 | 用途 | 默认值 |
+| --- | --- | --- |
+| `OPENREC_TEXT_EMBEDDING_MODEL` | 模型名称 | `Qwen/Qwen3-Embedding-0.6B` |
+| `OPENREC_TEXT_EMBEDDING_REVISION` | 远端提交号或本地模型文件指纹 | `main` |
+| `OPENREC_MODEL_CACHE` | 模型缓存目录 | 模型库默认缓存位置 |
+| `OPENREC_TEXT_EMBEDDING_DEVICE` | 推理设备 | `cpu` |
+| `OPENREC_TEXT_EMBEDDING_MAX_LENGTH` | 最大 token 数 | `512` |
+| `OPENREC_TEXT_EMBEDDING_INSTRUCTION` | query 检索任务说明 | `Given a search query, retrieve relevant items that match the query` |
+
+安装 `.[text]` 后执行（也可在本地 rec-algorithm 镜像的训练 Python 环境中运行）：
+
+```bash
+python -m tool.gen_text_embedding_data --item ../example/data/test/item.csv --output ../model/recall/item
+```
+
+`item_title_emb.csv` 使用 title，`item_content_emb.csv` 使用 title/category/tags。
+生成器返回模型名称、实际 revision、维度、预处理和数据校验值，CLI 将其输出到日志，
+不再单独生成 Qwen 专属 manifest。
+不记录机器上的绝对路径。模型缓存可挂载至容器任意目录，并通过 `OPENREC_MODEL_CACHE` 指定。
+已有 ModelScope 模型按 `<cache>/<namespace>/<model>` 解析并离线加载，
+例如模型名称 `Qwen/Qwen3-Embedding-0.6B`；本地模型通过权重和 tokenizer 等文件的 SHA-256
+生成 revision 指纹，查询侧可使用生成日志中的 revision 验证是否加载了相同文件。
+
+查询侧复用 `TextEmbeddingEncoder().encode_query(text)`，得到的向量用于检索这两张语言向量表。
+发布时应保留生成日志中的 model_name/revision/max_length 和 query instruction 配置；更换模型或预处理需重新生成两张表。
+该 Python 入口尚未接入 rec-server 的 HTTP 请求流程。
+
+离线全文检索数据统一输出为 `recall/item/text_search.csv` 和
+`recall/user/text_search.csv`。线上现有 `sparse` 算法和通道名称保持不变。

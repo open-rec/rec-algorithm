@@ -48,7 +48,7 @@ def test_runner_builds_versioned_es_publish_command(monkeypatch):
         "content_i2i",
         "user_cf_u2u",
         "content_u2u",
-        "user_emb_u2u",
+        "user_als_u2u",
     ],
 )
 def test_runner_builds_publishable_complementary_recall_jobs(algorithm):

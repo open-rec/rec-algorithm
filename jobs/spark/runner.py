@@ -19,7 +19,7 @@ ALGORITHMS = (
     "content_i2i",
     "user_cf_u2u",
     "content_u2u",
-    "user_emb_u2u",
+    "user_als_u2u",
     "sparse",
 )
 PUBLISHABLE_ALGORITHMS = ALGORITHMS
@@ -86,7 +86,7 @@ def recall_command(payload):
     ]
     if algorithm in PUBLISHABLE_ALGORITHMS:
         command.append("--publish")
-    if algorithm in ("item_seq_emb", "user_emb_u2u"):
+    if algorithm in ("item_seq_emb", "user_als_u2u"):
         command.extend(
             [
                 "--vector-size",

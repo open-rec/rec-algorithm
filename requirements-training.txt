@@ -4,3 +4,6 @@ pandas==2.3.3
 scikit-learn==1.7.2
 pydantic==2.13.5
 lightgbm>=4.3,<5
+
+# Qwen3 query/document encoding for language recall artifacts.
+transformers>=4.51,<5

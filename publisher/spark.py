@@ -51,7 +51,7 @@ def publish_recall(frame, kind, business_date, revision="r001", hosts=None, user
                 elif kind == "user-cf-u2i":
                     source.update(user=row.user, item=row.item)
                     doc_id = "%s:%s:%s" % (row.scene, row.user, row.item)
-                elif kind in ("user-cf-u2u", "content-u2u", "user-als-emb"):
+                elif kind in ("user-cf-u2u", "content-u2u", "user-als-u2u"):
                     source.update(left_user=row.left_user, right_user=row.right_user)
                     doc_id = "%s:%s:%s" % (row.scene, row.left_user, row.right_user)
                 elif kind != "sparse":
@@ -104,7 +104,7 @@ def publish_redis(frame, kind, host="redis", port=6379, password=None):
 
 
 def publish_embedding(frame, hosts, user=None, password=None, verify_certs=True,
-                      ca_certs=None, index_suffix="item-vector-index",
+                      ca_certs=None, index_suffix="item_seq_emb-index",
                       business_date=None, revision="r001", max_index_versions=2):
     """Publish versioned per-scene vectors and atomically switch serving aliases."""
     version = (business_date or "legacy").replace("-", "")

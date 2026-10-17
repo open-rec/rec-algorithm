@@ -9,6 +9,7 @@ setup(
     author='xsank',
     author_email='xsank@foxmail.com',
     extras_require={
+        'text': ['transformers>=4.51,<5', 'torch>=2.6', 'numpy', 'pandas'],
         'lightgbm': ['lightgbm>=4.3,<5'],
         'spark': ['pyspark==4.0.4'],
         'publish': ['redis>=5,<9', 'elasticsearch>=8,<9'],
