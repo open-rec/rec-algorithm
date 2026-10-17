@@ -25,7 +25,9 @@ from algorithm.rank.lr import EventDataSet
 from tool.gen_recall_data import generate as generate_recall
 
 
-from tool.check_default_artifacts import SCHEMA_VERSION, BUILD_VERSION, REQUIRED
+from tool.check_default_artifacts import (
+    SCHEMA_VERSION, BUILD_VERSION, REQUIRED, OPTIONAL, output_names_valid,
+)
 
 RECALL_REQUIRED = tuple(name for name in REQUIRED if name.startswith("recall/"))
 
@@ -47,7 +49,7 @@ def catalog_provenance():
     return {"catalog_version": catalog.version, "catalog_sha256": catalog.sha256}
 
 
-def reusable(model_root, inputs, catalog=None):
+def reusable(model_root, inputs, catalog=None, include_text_embeddings=False):
     root = Path(model_root)
     catalog = catalog or catalog_provenance()
     manifest_path = root / "default.manifest.json"
@@ -59,7 +61,9 @@ def reusable(model_root, inputs, catalog=None):
                 and manifest.get("build_version") == BUILD_VERSION
                 and manifest.get("inputs") == inputs
                 and all(manifest.get(name) == value for name, value in catalog.items())
-                and set(manifest.get("outputs", {})) == set(REQUIRED)
+                and output_names_valid(manifest.get("outputs", {}))
+                and (not include_text_embeddings
+                     or all(name in manifest["outputs"] for name in OPTIONAL))
                 and all(sha256(root / name) == digest
                         for name, digest in manifest.get("outputs", {}).items()))
     except (OSError, ValueError):
@@ -77,6 +81,25 @@ def reusable_recall(model_root, inputs):
                         for name in RECALL_REQUIRED))
     except (OSError, ValueError):
         return False
+
+
+def copy_optional_recall(model_root, stage, inputs):
+    """Preserve verified title vectors independently of rank/catalog rebuilds."""
+    model_root, stage = Path(model_root), Path(stage)
+    try:
+        previous = json.loads((model_root / "default.manifest.json").read_text())
+    except (OSError, ValueError):
+        return []
+    copied = []
+    for name in OPTIONAL:
+        source = model_root / name
+        if (previous.get("inputs", {}).get("item.csv") == inputs["item.csv"]
+                and source.is_file()
+                and previous.get("outputs", {}).get(name) == sha256(source)):
+            (stage / name).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, stage / name)
+            copied.append(name)
+    return copied
 
 
 def _bootstrap_space(model_type, target_type, users, candidates):
@@ -220,11 +243,12 @@ def _user_pair_labels(events, users):
     return result
 
 
-def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False):
+def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False,
+          include_text_embeddings=False):
     data_dir, model_root = Path(data_dir).resolve(), Path(model_root).resolve()
     inputs = input_hashes(data_dir)
     catalog = catalog_provenance()
-    if not force and reusable(model_root, inputs, catalog):
+    if not force and reusable(model_root, inputs, catalog, include_text_embeddings):
         return {"status": "reused", "model_root": str(model_root), "inputs": inputs}
     model_root.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".default-build-", dir=str(model_root)))
@@ -269,16 +293,25 @@ def build(data_dir, model_root, epochs=8, factor_dim=8, min_auc=.70, force=False
             generate_recall(data_dir / "item.csv", data_dir / "event.csv", stage / "recall",
                             user_file=data_dir / "user.csv")
 
-        outputs = {name: sha256(stage / name) for name in REQUIRED}
+        selected = list(REQUIRED)
+        selected.extend(copy_optional_recall(model_root, stage, inputs))
+        if include_text_embeddings and not all(name in selected for name in OPTIONAL):
+            from tool.gen_text_embedding_data import generate
+            generate(data_dir / "item.csv", stage / "recall/item")
+            selected.extend(name for name in OPTIONAL if name not in selected)
+        outputs = {name: sha256(stage / name) for name in selected}
         manifest = {"schema_version": SCHEMA_VERSION, "build_version": BUILD_VERSION,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "source": "rec-algorithm/tool/build_default_artifacts.py",
                     "feature_cutoff_time": cutoff, "inputs": inputs, "outputs": outputs,
                     **catalog}
-        for name in REQUIRED:
+        for name in selected:
             target = model_root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             os.replace(stage / name, target)
+        for name in OPTIONAL:
+            if name not in selected:
+                (model_root / name).unlink(missing_ok=True)
         (model_root / "default.manifest.json").write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         return {"status": "built", "model_root": str(model_root), "inputs": inputs,
@@ -295,9 +328,11 @@ def main():
     parser.add_argument("--factor-dim", type=int, default=8)
     parser.add_argument("--min-auc", type=float, default=.70)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--include-text-embeddings", action="store_true",
+                        help="generate optional Qwen title vectors (requires text extra and weights)")
     args = parser.parse_args()
     print(json.dumps(build(args.data, args.model_root, args.epochs, args.factor_dim,
-                           args.min_auc, args.force),
+                           args.min_auc, args.force, args.include_text_embeddings),
                      sort_keys=True))
 
 

@@ -9,8 +9,11 @@ from tool.check_default_artifacts import REQUIRED
 from tool.gen_recall_data import generate
 
 
-def test_complete_scene_scoped_recall_and_algorithm_specific_vectors(tmp_path, monkeypatch):
+@pytest.mark.parametrize("include_text", [False, True])
+def test_complete_scene_scoped_recall_and_algorithm_specific_vectors(tmp_path, monkeypatch, include_text):
     class Encoder:
+        def __init__(self):
+            assert include_text, "CPU bootstrap must not instantiate the language encoder"
         def encode(self, texts, **kwargs):
             return np.tile(np.array([1., 0., 0.]), (len(texts), 1))
         def metadata(self):
@@ -27,12 +30,17 @@ def test_complete_scene_scoped_recall_and_algorithm_specific_vectors(tmp_path, m
     for name, frame in (("user", users), ("item", items), ("event", events)):
         frame.to_csv(tmp_path / f"{name}.csv", index=False)
     output = tmp_path / "recall"
-    generate(tmp_path / "item.csv", tmp_path / "event.csv", output)
+    generate(tmp_path / "item.csv", tmp_path / "event.csv", output,
+             include_text_embeddings=include_text)
     expected = {name.removeprefix("recall/") for name in REQUIRED if name.startswith("recall/") and name.endswith(".csv")}
+    if include_text:
+        expected.add("item/item_title_emb.csv")
     assert {str(path.relative_to(output)) for path in output.rglob("*.csv")} == expected
     for target, entity, vector_file in (("item", "item", "item_seq_emb"),
                                          ("item", "item", "item_title_emb"),
                                          ("user", "user", "user_als_emb")):
+        if vector_file == "item_title_emb" and not include_text:
+            continue
         query = output / target / f"{vector_file}.csv"
         frame = pd.read_csv(query)
         for scene, rows in frame.groupby("scene"):

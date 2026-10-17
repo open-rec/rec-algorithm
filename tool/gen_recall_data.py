@@ -135,7 +135,7 @@ def gen_user_data(users, events, output, embedding_dim, neighbour_size):
 
 
 def generate(item_file, event_file, output_dir, i2i_size=20, recall_size=2000,
-             embedding_dim=10, neighbour_size=50, user_file=None):
+             embedding_dim=10, neighbour_size=50, user_file=None, include_text_embeddings=False):
     if not 1 <= embedding_dim <= 32:
         raise ValueError("embedding_dim must be between 1 and 32")
     users = pd.read_csv(user_file or Path(item_file).with_name("user.csv"))
@@ -151,7 +151,8 @@ def generate(item_file, event_file, output_dir, i2i_size=20, recall_size=2000,
     gen_user_cf_data(positive, recall_size, neighbour_size,
                      str(output / 'user_cf_u2i.csv'))
     gen_embedding_data(items, positive, embedding_dim, str(output / 'item_seq_emb.csv'))
-    generate_text_embeddings(item_file, output)
+    if include_text_embeddings:
+        generate_text_embeddings(item_file, output)
     gen_hot_data(positive, recall_size, str(output / 'hot.csv'))
     gen_new_data(items, recall_size, str(output / 'new.csv'))
     documents = [row for scene, group in items.groupby("scene")
@@ -174,6 +175,8 @@ if __name__ == "__main__":
     parser.add_argument('--recall-size', type=int, default=2000)
     parser.add_argument('--embedding-dim', type=int, default=10)
     parser.add_argument('--neighbour-size', type=int, default=50)
+    parser.add_argument("--include-text-embeddings", action="store_true",
+                        help="generate Qwen title vectors; requires the text extra and model weights")
     args = parser.parse_args()
     generate(args.item, args.event, args.output, args.i2i_size, args.recall_size,
-             args.embedding_dim, args.neighbour_size, args.user)
+             args.embedding_dim, args.neighbour_size, args.user, args.include_text_embeddings)

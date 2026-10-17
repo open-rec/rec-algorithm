@@ -8,7 +8,7 @@ from pathlib import Path
 from algorithm.feature.feature_catalog import FeatureCatalog
 
 SCHEMA_VERSION = 1
-BUILD_VERSION = 18
+BUILD_VERSION = 19
 REQUIRED = tuple(
     f"rank/{target}/{family}/{name}"
     for target in ("item", "user")
@@ -18,10 +18,17 @@ REQUIRED = tuple(
                  + (("item_feature.csv",) if target == "item" else ())
 ) + tuple(f"recall/item/{name}.csv" for name in (
     "item_cf_i2i", "content_i2i", "user_cf_u2i", "hot", "new", "item_seq_emb",
-    "item_title_emb", "text_search",
+    "text_search",
 )) + tuple(f"recall/user/{name}.csv" for name in (
     "user_cf_u2u", "content_u2u", "user_als_u2u", "user_als_emb", "text_search",
 ))
+
+
+OPTIONAL = ("recall/item/item_title_emb.csv",)
+
+
+def output_names_valid(outputs):
+    return set(REQUIRED) <= set(outputs) <= set(REQUIRED + OPTIONAL)
 
 
 def sha256(path):
@@ -47,7 +54,7 @@ def valid(data_dir, model_root):
                 and manifest.get("inputs") == inputs
                 and manifest.get("catalog_version") == catalog.version
                 and manifest.get("catalog_sha256") == catalog.sha256
-                and set(manifest.get("outputs", {})) == set(REQUIRED)
+                and output_names_valid(manifest.get("outputs", {}))
                 and all(sha256(model_root / name) == digest
                         for name, digest in manifest["outputs"].items()))
     except (OSError, ValueError, KeyError):

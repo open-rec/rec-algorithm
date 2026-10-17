@@ -578,3 +578,24 @@ of the online request timeout. Model paths and GPU loading remain owned by vLLM.
 rec-console prepares `openrec-recall-query-title-emb-YYYYMMDD-rNNN`, validates the staged
 count, blocks writes, and atomically activates the global alias. It retains at least two
 releases for rollback. The existing per-scene sequence-vector publisher remains separate.
+
+### CPU bootstrap and optional title vectors (bundle v19)
+
+`tool.build_default_artifacts` and `tool.gen_recall_data` now default to CPU recall
+and rank artifacts without loading a language model. They do not require transformers
+or download Qwen weights. The bundle checker accepts both CPU-only bundles and bundles
+with `recall/item/item_title_emb.csv`; every included output is checksummed.
+A rebuild preserves existing title vectors when the item CSV and vector checksum match
+the previous manifest, even if events or rank feature definitions changed.
+
+To generate a complete language-enabled bundle, install `rec-algorithm[text]`, configure
+the model cache as described above, then run:
+
+```shell
+python -m tool.build_default_artifacts --data ../example/data/test \
+  --model-root ../model --include-text-embeddings
+```
+
+The same flag is available on `tool.gen_recall_data`. Ordinary standalone/cluster
+bootstrap does not enable it; enabling online query embedding requires a matching
+precomputed title table and inference service. No substitute vectors are generated.
