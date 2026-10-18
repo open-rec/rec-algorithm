@@ -200,7 +200,7 @@ def generate(output, user_count=10000, item_count=10000, impression_count=100000
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", default="../example/data/test")
+    parser.add_argument("--output", default="../openrec/data/test")
     parser.add_argument("--users", type=int, default=10000)
     parser.add_argument("--items", type=int, default=10000)
     parser.add_argument("--impressions", type=int, default=100000)

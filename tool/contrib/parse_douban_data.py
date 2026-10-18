@@ -152,6 +152,6 @@ def parse_event_data(from_filename='event.csv', to_filename='event.csv'):
 
 
 if __name__ == "__main__":
-    parse_user_data(from_filename='../../data/douban/users.csv', to_filename='../../example/data/douban/user.csv')
-    parse_item_data(from_filename='../../data/douban/movies.csv', to_filename='../../example/data/douban/item.csv')
-    parse_event_data(from_filename='../../data/douban/ratings.csv', to_filename='../../example/data/douban/event.csv')
+    parse_user_data(from_filename='../../data/douban/users.csv', to_filename='../../openrec/data/douban/user.csv')
+    parse_item_data(from_filename='../../data/douban/movies.csv', to_filename='../../openrec/data/douban/item.csv')
+    parse_event_data(from_filename='../../data/douban/ratings.csv', to_filename='../../openrec/data/douban/event.csv')

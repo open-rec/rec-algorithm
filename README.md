@@ -13,7 +13,7 @@ cluster execution (Hive / Spark), with the same recall formulas and serving sche
 
 It plays two roles:
 
-- **a batch tool** — generate recall tables as CSV, which [example/init](https://github.com/open-rec/openrec/tree/master/init) loads into Redis and Elasticsearch
+- **a batch tool** — generate recall tables as CSV, which [openrec/init](https://github.com/open-rec/openrec/tree/master/init) loads into Redis and Elasticsearch
 - **a library** — [rank-engine](https://github.com/open-rec/rank-engine) imports `LRModel`, `UserFeature` and `ItemFeature` from it at serving time, pinned as `rec-algorithm==0.1.0`
 
 ## install
@@ -36,7 +36,7 @@ For local tests, copy the fixture into the gitignored data directory:
 
 ```shell
 mkdir -p data/test
-cp ../example/data/test/*.csv data/test/     # if you have the example repo checked out
+cp ../openrec/data/test/*.csv data/test/     # if you have the example repo checked out
 ```
 
 `data/` holds CSV datasets. Local model helpers save to `OPENREC_MODEL_HOME/rank/{scene}`
@@ -223,9 +223,9 @@ ML model format.
 Generate deterministic raw inputs, then build the deployable model bundle:
 
 ```shell
-python tool/gen_test_data.py --output ../example/data/test --seed 42
+python tool/gen_test_data.py --output ../openrec/data/test --seed 42
 python -m tool.build_default_artifacts \
-  --data ../example/data/test --model-root ../model
+  --data ../openrec/data/test --model-root ../model
 ```
 
 `gen_test_data.py` creates an impression funnel with expose, stay, click, collect and buy events.
@@ -350,9 +350,9 @@ Create flat user/item snapshots that can be imported into the online `user:*` an
 
 ```shell
 python tool/gen_feature_data.py \
-  --user ../example/data/test/user.csv \
-  --item ../example/data/test/item.csv \
-  --event ../example/data/test/event.csv \
+  --user ../openrec/data/test/user.csv \
+  --item ../openrec/data/test/item.csv \
+  --event ../openrec/data/test/event.csv \
   --output data/feature/test
 ```
 
@@ -370,7 +370,7 @@ feature dimensions depend on that artifact, not a fixed dataset-wide constant.
 ## test
 
 Run tests from the repository root. Shared helpers resolve the deterministic fixture under
-`data/test`; copy it from `../example/data/test` as described in the install section when it is not
+`data/test`; copy it from `../openrec/data/test` as described in the install section when it is not
 already present:
 
 ```shell
@@ -528,7 +528,7 @@ encoder; strategy and artifact names do. No other recall algorithm changes in th
 安装 `.[text]` 后执行（也可在本地 rec-algorithm 镜像的训练 Python 环境中运行）：
 
 ```bash
-python -m tool.gen_text_embedding_data --item ../example/data/test/item.csv --output ../model/recall/item
+python -m tool.gen_text_embedding_data --item ../openrec/data/test/item.csv --output ../model/recall/item
 ```
 
 默认仅生成 `item_title_emb.csv`（title）。显式增加 `--include-content` 可生成
@@ -592,7 +592,7 @@ To generate a complete language-enabled bundle, install `rec-algorithm[text]`, c
 the model cache as described above, then run:
 
 ```shell
-python -m tool.build_default_artifacts --data ../example/data/test \
+python -m tool.build_default_artifacts --data ../openrec/data/test \
   --model-root ../model --include-text-embeddings
 ```
 
