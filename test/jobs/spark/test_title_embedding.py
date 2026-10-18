@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from jobs.spark.title_embedding import embed_titles
+from jobs.spark.recall.title_embedding import embed_titles
 from jobs.spark.runner import recall_command
 
 

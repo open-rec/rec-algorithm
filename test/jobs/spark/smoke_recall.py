@@ -12,9 +12,11 @@ from algorithm.recall.content_i2i import ContentBasedI2I
 from algorithm.recall.item_cf_i2i import ItemBasedI2I
 from algorithm.recall.new import New
 from algorithm.recall.user_cf_u2i import UserBasedCF
-from jobs.spark.recall import (content_i2i, content_u2u, hot, item_cf_i2i, item_seq_emb,
-                               new, user_cf_u2i, user_cf_u2u, user_als_u2u)
-from jobs.spark.io import keep_active_item_events, read_events, read_items, write_result
+from jobs.spark.recall.popularity import hot, new
+from jobs.spark.recall.collaborative import item_cf_i2i, user_cf_u2i, user_cf_u2u
+from jobs.spark.recall.content import content_i2i, content_u2u
+from jobs.spark.recall.embedding import item_seq_emb, user_als_u2u
+from jobs.spark.common.io import keep_active_item_events, read_events, read_items, write_result
 
 
 def main():

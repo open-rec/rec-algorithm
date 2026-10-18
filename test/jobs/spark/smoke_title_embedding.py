@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 from elasticsearch import Elasticsearch
 from pyspark.sql import SparkSession
-from jobs.spark.title_embedding import title_embeddings
-from jobs.spark.recall_job import parser, run
+from jobs.spark.recall.title_embedding import title_embeddings
+from jobs.spark.recall.job import parser, run
 from publisher.spark import publish_recall
 from rec_console.module.recall.service import RecallIndexManager
 
@@ -58,7 +58,7 @@ def main():
                 raise AssertionError("duplicate global IDs accepted")
             except ValueError:
                 pass
-            with patch("jobs.spark.recall_job.read_items", return_value=items), patch(
+            with patch("jobs.spark.recall.inputs.read_items", return_value=items), patch(
                     "publisher.spark._console_request", side_effect=control):
                 args = parser().parse_args(["query_title_emb", "--date", "2026-10-17",
                     "--revision", "r003", "--publish", "--es-password",

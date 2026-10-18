@@ -13,9 +13,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-from pyspark.sql import SparkSession, Window, functions as F
+from pyspark.sql import Window, functions as F
 
-from jobs.spark.io import (
+from jobs.spark.common.session import get_spark
+from jobs.spark.common.io import (
     read_events_as_of,
     read_event_history,
     read_items,
@@ -25,7 +26,7 @@ from jobs.spark.io import (
 )
 from algorithm.feature.feature_catalog import select_training_features
 
-from jobs.spark.point_in_time import materialize_point_in_time_samples_spark
+from jobs.spark.ranking.point_in_time import materialize_point_in_time_samples_spark
 
 
 def parser():
@@ -174,12 +175,7 @@ def _user_pair_events(events, users, max_events):
 
 def run(args, spark=None):
     _validate(args)
-    spark = (
-        spark
-        or SparkSession.builder.appName("openrec-rank-train")
-        .enableHiveSupport()
-        .getOrCreate()
-    )
+    spark = get_spark("openrec-rank-train", spark, hive=True)
     business_day = datetime.strptime(args.date, "%Y-%m-%d").replace(
         tzinfo=timezone.utc
     )

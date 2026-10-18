@@ -21,7 +21,7 @@ class PointInTimeValueTests(unittest.TestCase):
         cls.spark.stop()
 
     def test_non_numeric_events_keep_counts_and_contribute_zero_value(self):
-        from jobs.spark.point_in_time import _behavior, _commerce
+        from jobs.spark.ranking.point_in_time import _behavior, _commerce
         labels = self.spark.createDataFrame([("sample", "u", 100)],
             "_sample_id string, user_id string, _label_time long")
         history = self.spark.createDataFrame([

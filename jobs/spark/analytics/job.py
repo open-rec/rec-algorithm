@@ -4,9 +4,10 @@ import argparse
 import json
 import re
 
-from pyspark.sql import SparkSession, Window, functions as F
+from pyspark.sql import Window, functions as F
 
-from jobs.spark.io import EVENT_FIELDS, read_entity
+from jobs.spark.common.session import get_spark
+from jobs.spark.common.io import EVENT_FIELDS, read_entity
 
 
 def parser():
@@ -64,7 +65,7 @@ def _summary(frame):
 
 def run(args, spark=None):
     _validate(args)
-    spark = spark or SparkSession.builder.appName("openrec-business-analytics").getOrCreate()
+    spark = get_spark("openrec-business-analytics", spark, hive=False)
     events = read_entity(spark, "openrec.event_entity", EVENT_FIELDS,
                          keep_partition=True, path=args.event_path) \
         .filter((F.col("dt") >= args.date_from) & (F.col("dt") <= args.date_to))

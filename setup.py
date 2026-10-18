@@ -20,7 +20,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'openrec-spark-recall=jobs.spark.recall_job:main',
+            'openrec-spark-recall=jobs.spark.recall.job:main',
         ],
     },
 )

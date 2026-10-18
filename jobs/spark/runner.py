@@ -4,248 +4,37 @@ Offline gateway for feature capabilities and OpenRec Spark jobs.
 
 import json
 import os
-import re
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from jobs.spark.recall.command import recall_command
+from jobs.spark.ranking.command import rank_command
+from jobs.spark.analytics.command import analytics_command
 
-ALGORITHMS = (
-    "hot",
-    "new",
-    "item_cf_i2i",
-    "item_seq_emb",
-    "user_cf_u2i",
-    "content_i2i",
-    "user_cf_u2u",
-    "content_u2u",
-    "user_als_u2u",
-    "text_search",
-    "query_title_emb",
-)
-PUBLISHABLE_ALGORITHMS = ALGORITHMS
+
 JOB_LOCK = threading.Lock()
 
 
-def recall_command(payload):
-    algorithm = payload.get("algorithm")
-    business_date = payload.get("date")
-    revision = payload.get("revision", "r001")
-    if algorithm not in ALGORITHMS:
-        raise ValueError("unsupported recall algorithm: %s" % algorithm)
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
-        raise ValueError("date must use YYYY-MM-DD")
-    if not re.match(r"^r\d{3,}$", revision):
-        raise ValueError("revision must look like r001")
-    target_type = payload.get("target_type", "item")
-    if target_type not in ("item", "user"):
-        raise ValueError("target_type must be item or user")
-    output_name = "user_text_search" if algorithm == "text_search" and target_type == "user" else algorithm
-    output_table = payload.get("output_table", "openrec.recall_%s" % output_name)
-    if not re.match(r"^[A-Za-z_][A-Za-z0-9_.]*$", output_table):
-        raise ValueError("invalid output table")
-    command = [
-        "/opt/spark/bin/spark-submit",
-        "--master",
-        os.environ.get("SPARK_MASTER_URL", "spark://spark-master:7077"),
-        "--deploy-mode",
-        "client",
-        "--total-executor-cores",
-        os.environ.get("RECALL_SPARK_CORES", "4"),
-        "--py-files",
-        "/opt/openrec/rec-algorithm.zip",
-        "/opt/openrec/jobs/spark/recall_job.py",
-        algorithm,
-        "--date",
-        business_date,
-        "--revision",
-        revision,
-        "--event-path",
-        os.environ.get(
-            "OPENREC_EVENT_PATH", "hdfs://namenode:8020/openrec/hive/event"
-        ),
-        "--item-path",
-        os.environ.get(
-            "OPENREC_ITEM_PATH", "hdfs://namenode:8020/openrec/hive/item"
-        ),
-        "--user-path",
-        os.environ.get(
-            "OPENREC_USER_PATH", "hdfs://namenode:8020/openrec/hive/user"
-        ),
-        "--output-path",
-        os.environ.get(
-            "OPENREC_RECALL_PATH", "hdfs://namenode:8020/openrec/hive/recall"
-        )
-        + "/"
-        + output_name,
-        "--es-host",
-        "https://elasticsearch:9200",
-        "--es-user",
-        "elastic",
-        "--es-password",
-        os.environ.get("ELASTIC_PASSWORD", "openrec-es-password"),
-        "--console-url",
-        os.environ.get("REC_CONSOLE_URL", "http://rec-console:8095"),
-        "--max-index-versions",
-        str(payload.get("max_index_versions", 2)),
-    ]
-    if algorithm in PUBLISHABLE_ALGORITHMS:
-        command.append("--publish")
-    if algorithm in ("item_seq_emb", "user_als_u2u"):
-        command.extend(
-            [
-                "--vector-size",
-                str(payload.get("vector_size", 10)),
-                "--min-count",
-                str(payload.get("min_count", 1)),
-            ]
-        )
-    if algorithm in ("item_cf_i2i", "content_i2i"):
-        command.extend(["--size", str(payload.get("size", 20))])
-    else:
-        command.extend(["--size", str(payload.get("size", 1000))])
-    if algorithm in ("user_cf_u2i", "user_cf_u2u"):
-        command.extend(
-            ["--neighbour-size", str(payload.get("neighbour_size", 50))]
-        )
-    if algorithm == "text_search":
-        command.extend(["--target-type", target_type])
-        defaults = ["name", "gender", "country", "city", "tags"] if target_type == "user" else ["title", "category", "tags"]
-        columns = payload.get("text_columns", defaults)
-        if not isinstance(columns, list) or not columns or not all(
-                isinstance(value, str) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", value)
-                for value in columns):
-            raise ValueError("text_columns must be a non-empty list of column names")
-        command.extend(["--text-columns", ",".join(columns)])
-    return command
+# command builder, stdout marker, response key, missing-result message
+JOB_ROUTES = {
+    "/jobs/recall": (recall_command, None, None, None),
+    "/jobs/rank/train": (rank_command, "OPENREC_MODEL_MANIFEST=", "manifest",
+                         "training manifest is missing"),
+    "/jobs/analytics": (analytics_command, "OPENREC_ANALYTICS=", "analytics",
+                        "analytics result is missing"),
+}
 
 
-def rank_command(payload):
-    from algorithm.feature.feature_catalog import select_training_features
-
-    business_date = payload.get("date")
-    revision = payload.get("revision", "r001")
-    scene = payload.get("scene", "scene_0")
-    model_type = payload.get("model_type", "lr")
-    target_type = payload.get("target_type", "item")
-    factor_dim = int(payload.get("factor_dim", 8))
-    user_label_window_days = int(payload.get("user_label_window_days", 7))
-    max_events = int(payload.get("max_events", 200000))
-    max_history_rows = int(payload.get("max_history_rows", 5000000))
-    max_materialization_seconds = int(
-        payload.get("max_materialization_seconds", 1800)
-    )
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", business_date or ""):
-        raise ValueError("date must use YYYY-MM-DD")
-    if not re.match(r"^r\d{3,}$", revision):
-        raise ValueError("revision must look like r001")
-    if not re.match(r"^[A-Za-z0-9_-]+$", scene):
-        raise ValueError("invalid scene")
-    if model_type not in ("lr", "fm", "lightgbm"):
-        raise ValueError("model_type must be lr, fm or lightgbm")
-    if target_type not in ("item", "user"):
-        raise ValueError("target_type must be item or user")
-    if not 1 <= factor_dim <= 256:
-        raise ValueError("factor_dim must be between 1 and 256")
-    if not 1 <= user_label_window_days <= 30:
-        raise ValueError("user_label_window_days must be between 1 and 30")
-    if (
-        max_events < 1
-        or max_history_rows < max_events
-        or max_materialization_seconds < 1
-    ):
-        raise ValueError("invalid PIT materialization resource gate")
-    selection = select_training_features(
-        model_type, target_type, payload.get("feature_selection")
-    )
-    return [
-        "/opt/spark/bin/spark-submit",
-        "--master",
-        os.environ.get("SPARK_MASTER_URL", "spark://spark-master:7077"),
-        "--deploy-mode",
-        "client",
-        "--total-executor-cores",
-        os.environ.get("RANK_SPARK_CORES", "4"),
-        "--py-files",
-        "/opt/openrec/rec-algorithm.zip",
-        "/opt/openrec/jobs/spark/rank_job.py",
-        "--date",
-        business_date,
-        "--revision",
-        revision,
-        "--scene",
-        scene,
-        "--event-path",
-        os.environ.get(
-            "OPENREC_EVENT_PATH", "hdfs://namenode:8020/openrec/hive/event"
-        ),
-        "--item-path",
-        os.environ.get(
-            "OPENREC_ITEM_PATH", "hdfs://namenode:8020/openrec/hive/item"
-        ),
-        "--user-path",
-        os.environ.get(
-            "OPENREC_USER_PATH", "hdfs://namenode:8020/openrec/hive/user"
-        ),
-        "--artifact-root",
-        os.environ.get("MODEL_ARTIFACT_ROOT", "/models/releases"),
-        "--epochs",
-        str(payload.get("epochs", 5)),
-        "--min-auc",
-        str(payload.get("min_auc", 0.0)),
-        "--model-type",
-        model_type,
-        "--target-type",
-        target_type,
-        "--factor-dim",
-        str(factor_dim),
-        "--feature-selection",
-        json.dumps(selection),
-        "--batch-size",
-        str(payload.get("batch_size", 256)),
-        "--validation-ratio",
-        str(payload.get("validation_ratio", 0.2)),
-        "--user-label-window-days",
-        str(user_label_window_days),
-        "--max-events",
-        str(max_events),
-        "--max-history-rows",
-        str(max_history_rows),
-        "--max-materialization-seconds",
-        str(max_materialization_seconds),
-    ]
-
-
-def analytics_command(payload):
-    date_from, date_to = payload.get("date_from"), payload.get("date_to")
-    scene = payload.get("scene", "")
-    for value in (date_from, date_to):
-        if not re.match(r"^\d{4}-\d{2}-\d{2}$", value or ""):
-            raise ValueError("dates must use YYYY-MM-DD")
-    if date_from > date_to:
-        raise ValueError("date_from must not be after date_to")
-    if scene and not re.match(r"^[A-Za-z0-9_-]+$", scene):
-        raise ValueError("invalid scene")
-    return [
-        "/opt/spark/bin/spark-submit",
-        "--master",
-        os.environ.get("SPARK_MASTER_URL", "spark://spark-master:7077"),
-        "--deploy-mode",
-        "client",
-        "--total-executor-cores",
-        os.environ.get("ANALYTICS_SPARK_CORES", "4"),
-        "--py-files",
-        "/opt/openrec/rec-algorithm.zip",
-        "/opt/openrec/jobs/spark/analytics_job.py",
-        "--date-from",
-        date_from,
-        "--date-to",
-        date_to,
-        "--event-path",
-        os.environ.get(
-            "OPENREC_EVENT_PATH", "hdfs://namenode:8020/openrec/hive/event"
-        ),
-    ] + (["--scene", scene] if scene else [])
+def job_result(path, stdout):
+    result = {"status": "success", "output": stdout[-20000:]}
+    _, marker, key, missing = JOB_ROUTES[path]
+    if marker:
+        lines = [line for line in stdout.splitlines() if line.startswith(marker)]
+        if not lines:
+            raise RuntimeError(missing)
+        result[key] = json.loads(lines[-1][len(marker):])
+    return result
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -286,23 +75,15 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, TypeError) as error:
                 self._write(422, {"detail": str(error)})
             return
-        if self.path not in (
-            "/jobs/recall",
-            "/jobs/rank/train",
-            "/jobs/analytics",
-        ):
+        if self.path not in JOB_ROUTES:
             self._write(404, {"error": "not found"})
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
-            command = (
-                recall_command(payload)
-                if self.path == "/jobs/recall"
-                else rank_command(payload)
-                if self.path == "/jobs/rank/train"
-                else analytics_command(payload)
-            )
+            if not isinstance(payload, dict):
+                raise ValueError("configuration must be an object")
+            command = JOB_ROUTES[self.path][0](payload)
         except (ValueError, TypeError, json.JSONDecodeError) as error:
             self._write(400, {"error": str(error)})
             return
@@ -326,29 +107,11 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 )
                 return
-            result = {"status": "success", "output": process.stdout[-20000:]}
-            if self.path == "/jobs/rank/train":
-                marker = "OPENREC_MODEL_MANIFEST="
-                lines = [
-                    line
-                    for line in process.stdout.splitlines()
-                    if line.startswith(marker)
-                ]
-                if not lines:
-                    self._write(500, {"error": "training manifest is missing"})
-                    return
-                result["manifest"] = json.loads(lines[-1][len(marker) :])
-            if self.path == "/jobs/analytics":
-                marker = "OPENREC_ANALYTICS="
-                lines = [
-                    line
-                    for line in process.stdout.splitlines()
-                    if line.startswith(marker)
-                ]
-                if not lines:
-                    self._write(500, {"error": "analytics result is missing"})
-                    return
-                result["analytics"] = json.loads(lines[-1][len(marker) :])
+            try:
+                result = job_result(self.path, process.stdout)
+            except RuntimeError as error:
+                self._write(500, {"error": str(error)})
+                return
             self._write(200, result)
         except subprocess.TimeoutExpired as error:
             self._write(

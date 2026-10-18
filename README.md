@@ -61,7 +61,7 @@ bash package.sh                              # -> dist/rec_algorithm-0.1.0-*.whl
 | `algorithm/structure/` | `ScoreItem`, JSON helpers |
 | `tool/` | dataset generation and recall dumping scripts |
 | `test/` | pytest suites, doubling as usage examples |
-| `jobs/spark/` | distributed Hive readers, recall formulas and scheduled job CLI |
+| `jobs/spark/` | categorized recall/ranking/analytics jobs and shared Spark infrastructure; [extension guide](jobs/spark/README.md) |
 | `publisher/` | Redis and Elasticsearch serving-layer publication |
 | `conf/` | cluster configuration examples |
 
@@ -83,19 +83,19 @@ Run with the cluster's Spark installation:
 ```shell
 spark-submit --master spark://spark-master:7077 \
   --py-files dist/rec_algorithm-0.1.0-py3-none-any.whl \
-  jobs/spark/recall_job.py hot \
+  jobs/spark/recall/job.py hot \
   --event-table openrec.event_entity \
   --date 2026-08-18 --output-table openrec.recall_hot --size 2000 --publish
 
 spark-submit --master spark://spark-master:7077 \
   --py-files dist/rec_algorithm-0.1.0-py3-none-any.whl \
-  jobs/spark/recall_job.py item_cf_i2i \
+  jobs/spark/recall/job.py item_cf_i2i \
   --event-table openrec.event_entity \
   --date 2026-08-18 --output-table openrec.recall_item_cf_i2i --size 20 --publish
 
 spark-submit --master spark://spark-master:7077 \
   --py-files dist/rec_algorithm-0.1.0-py3-none-any.whl \
-  jobs/spark/recall_job.py item_seq_emb \
+  jobs/spark/recall/job.py item_seq_emb \
   --event-table openrec.event_entity \
   --date 2026-08-18 --output-table openrec.recall_item_seq_emb --vector-size 64 --publish \
   --es-password "$ELASTIC_PASSWORD" --es-ca-certs /path/to/ca.crt
@@ -212,7 +212,7 @@ and PyTorch after Spark preparation.
 It scans only the selected daily event partitions, de-duplicates mutation-envelope events by trace
 identity, and returns overall PV/UV CTR, PV/UV CVR, active items and GMV plus daily trend rows.
 
-`jobs.spark.rank.labelled_interactions` performs the large join against the same active item
+`jobs.spark.ranking.samples.labelled_interactions` performs the large join against the same active item
 snapshot, excluding deleted-item samples before deterministic train/validation splitting.
 PyTorch/FeatureSpace training remains the model contract so its checkpoint is still
 loadable by rank-engine; distributed sample preparation does not introduce an incompatible Spark

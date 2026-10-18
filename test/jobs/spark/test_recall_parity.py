@@ -11,10 +11,12 @@ from algorithm.recall.hot import Hot
 from algorithm.recall.content_i2i import ContentBasedI2I
 from algorithm.recall.item_cf_i2i import ItemBasedI2I
 from algorithm.recall.user_cf_u2i import UserBasedCF
-from jobs.spark.recall import content_i2i, hot, item_cf_i2i, user_cf_u2i
-from jobs.spark.io import read_items, read_users, resolve_event_history
-from jobs.spark.rank_job import _freeze_feature_history, _user_pair_events
-from jobs.spark.point_in_time import materialize_point_in_time_samples_spark
+from jobs.spark.recall.content import content_i2i
+from jobs.spark.recall.popularity import hot
+from jobs.spark.recall.collaborative import item_cf_i2i, user_cf_u2i
+from jobs.spark.common.io import read_items, read_users, resolve_event_history
+from jobs.spark.ranking.job import _freeze_feature_history, _user_pair_events
+from jobs.spark.ranking.point_in_time import materialize_point_in_time_samples_spark
 
 
 @pytest.fixture(scope="module")
@@ -196,7 +198,7 @@ def test_spark_materializes_aligned_point_in_time_features(spark, publication, e
 
 
 def test_behavior_resolves_latest_mutation_before_event_time_filter(spark):
-    from jobs.spark.point_in_time import _behavior
+    from jobs.spark.ranking.point_in_time import _behavior
     labels = spark.createDataFrame([("sample", "u", 100)],
                                    "_sample_id string, user_id string, _label_time long")
     history = spark.createDataFrame([
@@ -208,7 +210,7 @@ def test_behavior_resolves_latest_mutation_before_event_time_filter(spark):
 
 
 def test_event_reader_preserves_new_optional_fields_and_old_typed_tables(spark):
-    from jobs.spark.io import read_entity, EVENT_FIELDS
+    from jobs.spark.common.io import read_entity, EVENT_FIELDS
     spark.createDataFrame([('{"userId":"u","itemId":"i","sessionId":"s",'
                             '"requestId":"r","position":3}',)], ["json"]).createOrReplaceTempView("audit_events")
     row = read_entity(spark, "audit_events", EVENT_FIELDS).first()
@@ -238,7 +240,7 @@ def test_global_labels_without_event_id_keep_distinct_scene_identity(spark):
 
 
 def test_user_candidate_behavior_uses_candidate_identity(spark):
-    from jobs.spark.point_in_time import _behavior
+    from jobs.spark.ranking.point_in_time import _behavior
     labels = spark.createDataFrame([("sample", "source", "candidate", 100)],
         "_sample_id string, user_id string, item_id string, _label_time long")
     history = spark.createDataFrame([
