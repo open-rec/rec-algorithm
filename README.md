@@ -1,6 +1,6 @@
 # OpenRec Algorithms
 
-[Release v0.1.0](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md)
+[Release v0.2.0](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md)
 
 [![CI](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml/badge.svg)](https://github.com/open-rec/rec-algorithm/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
@@ -14,7 +14,7 @@ cluster execution (Hive / Spark), with the same recall formulas and serving sche
 It plays two roles:
 
 - **a batch tool** — generate recall tables as CSV, which [openrec/init](https://github.com/open-rec/openrec/tree/master/init) loads into Redis and Elasticsearch
-- **a library** — [rank-engine](https://github.com/open-rec/rank-engine) imports `LRModel`, `UserFeature` and `ItemFeature` from it at serving time, pinned as `rec-algorithm==0.1.0`
+- **a library** — [rank-engine](https://github.com/open-rec/rank-engine) imports `LRModel`, `UserFeature` and `ItemFeature` from it at serving time, pinned as `rec-algorithm==0.2.0`
 
 ## install
 
@@ -47,7 +47,7 @@ are created on demand. Runtime cluster releases use a separate artifact volume.
 Build the wheel that `rank-engine` depends on:
 
 ```shell
-bash package.sh                              # -> dist/rec_algorithm-0.1.0-*.whl
+bash package.sh                              # -> dist/rec_algorithm-0.2.0-*.whl
 ```
 
 ## layout
@@ -82,19 +82,19 @@ Run with the cluster's Spark installation:
 
 ```shell
 spark-submit --master spark://spark-master:7077 \
-  --py-files dist/rec_algorithm-0.1.0-py3-none-any.whl \
+  --py-files dist/rec_algorithm-0.2.0-py3-none-any.whl \
   jobs/spark/recall/job.py hot \
   --event-table openrec.event_entity \
   --date 2026-08-18 --output-table openrec.recall_hot --size 2000 --publish
 
 spark-submit --master spark://spark-master:7077 \
-  --py-files dist/rec_algorithm-0.1.0-py3-none-any.whl \
+  --py-files dist/rec_algorithm-0.2.0-py3-none-any.whl \
   jobs/spark/recall/job.py item_cf_i2i \
   --event-table openrec.event_entity \
   --date 2026-08-18 --output-table openrec.recall_item_cf_i2i --size 20 --publish
 
 spark-submit --master spark://spark-master:7077 \
-  --py-files dist/rec_algorithm-0.1.0-py3-none-any.whl \
+  --py-files dist/rec_algorithm-0.2.0-py3-none-any.whl \
   jobs/spark/recall/job.py item_seq_emb \
   --event-table openrec.event_entity \
   --date 2026-08-18 --output-table openrec.recall_item_seq_emb --vector-size 64 --publish \
